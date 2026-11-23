@@ -42,7 +42,18 @@ const ICONS = {
   clock: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0 M12 6v6l4 2',
   download: 'M12 3v12 M7 10l5 5 5-5 M5 21h14',
   wall: 'M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v6 M15 9v6 M9 15v6',
+  flame: 'M12 22c4 0 7-2.7 7-6.8 0-3.3-2.1-5.6-3.6-7.2-.4 1.9-1.4 3.2-2.7 3.8.3-3.6-1.2-6.9-4.2-8.8.1 3-1.6 5-3.1 6.7C4.1 11.2 5 13.6 5 15.2 5 19.3 8 22 12 22z',
+  sparkle: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z',
+  rotate: 'M20.5 13a8.5 8.5 0 0 1-15.2 4.4 M3.5 11a8.5 8.5 0 0 1 15.2-4.4 M19 2.5v4.2h-4.2 M5 21.5v-4.2h4.2',
+  dumbbell: 'M5 7.5h3v9H5z M16 7.5h3v9h-3z M2.5 10v4 M21.5 10v4 M8 12h8',
+  stretch: 'M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7',
+  moon: 'M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z',
+  bulb: 'M9 18h6 M10 21h4 M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z',
+  target: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0 M18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0 M14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0',
 };
+
+// Kategorie/Fokus → Icon
+export const CAT_ICON = { mix: 'sparkle', mobility: 'rotate', strength: 'dumbbell', stretch: 'stretch', relax: 'moon' };
 
 export function icon(name) {
   const span = document.createElement('span');
@@ -61,16 +72,15 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-export function confirmDialog(title, text, okLabel = 'OK', cancelLabel = 'Abbrechen') {
+export function confirmDialog(title, text, okLabel = 'OK', cancelLabel = 'Abbrechen', { destructive = false } = {}) {
   return new Promise((resolve) => {
     const done = (v) => { wrap.classList.remove('open'); setTimeout(() => wrap.remove(), 200); resolve(v); };
     const wrap = h('div', { class: 'modal-wrap', onclick: (e) => { if (e.target === wrap) done(false); } }, [
-      h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, [
-        h('h3', {}, title),
-        h('p', { class: 'muted' }, text),
+      h('div', { class: 'modal', role: 'alertdialog', 'aria-modal': 'true' }, [
+        h('div', { class: 'modal-body' }, [h('h3', {}, title), h('p', {}, text)]),
         h('div', { class: 'modal-actions' }, [
-          h('button', { class: 'btn ghost', onclick: () => done(false) }, cancelLabel),
-          h('button', { class: 'btn primary', onclick: () => done(true) }, okLabel),
+          h('button', { class: 'alert-btn cancel', onclick: () => done(false) }, cancelLabel),
+          h('button', { class: 'alert-btn' + (destructive ? ' destructive' : ' default'), onclick: () => done(true) }, okLabel),
         ]),
       ]),
     ]);
@@ -81,18 +91,39 @@ export function confirmDialog(title, text, okLabel = 'OK', cancelLabel = 'Abbrec
 
 export function sheet(content, { onClose } = {}) {
   const close = () => {
+    panel.style.transform = '';
     wrap.classList.remove('open');
     setTimeout(() => { wrap.remove(); onClose?.(); }, 250);
     window.removeEventListener('popstate', close);
   };
-  const wrap = h('div', { class: 'sheet-wrap', onclick: (e) => { if (e.target === wrap) close(); } }, [
-    h('div', { class: 'sheet' }, [
-      h('div', { class: 'sheet-handle' }),
-      h('button', { class: 'icon-btn sheet-close', 'aria-label': 'Schließen', onclick: close }, icon('close')),
-      content,
-    ]),
+  const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, [
+    h('div', { class: 'sheet-handle', 'aria-hidden': 'true' }),
+    h('button', { class: 'icon-btn sheet-close', 'aria-label': 'Schließen', onclick: close }, icon('close')),
+    content,
   ]);
+  const wrap = h('div', { class: 'sheet-wrap', onclick: (e) => { if (e.target === wrap) close(); } }, [panel]);
   document.body.append(wrap);
+
+  // Wischen nach unten schließt das Sheet (nur wenn ganz oben gescrollt)
+  let startY = null, dy = 0, t0 = 0;
+  panel.addEventListener('touchstart', (e) => {
+    if (panel.scrollTop > 0) return;
+    startY = e.touches[0].clientY; dy = 0; t0 = Date.now();
+    panel.style.transition = 'none';
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (startY === null) return;
+    dy = Math.max(0, e.touches[0].clientY - startY);
+    if (dy > 0) panel.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  panel.addEventListener('touchend', () => {
+    if (startY === null) return;
+    panel.style.transition = '';
+    const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+    if (dy > 140 || (fast && dy > 40)) close();
+    else panel.style.transform = '';
+    startY = null;
+  });
   requestAnimationFrame(() => wrap.classList.add('open'));
   window.addEventListener('popstate', close);
   return { close };

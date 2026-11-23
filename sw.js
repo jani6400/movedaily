@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline nutzbar.
 // Bei jeder Änderung an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'movedaily-v1';
+const VERSION = 'movedaily-v2';
 
 const FILES = [
   './',

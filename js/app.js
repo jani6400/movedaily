@@ -6,11 +6,11 @@ import { store, dateKey } from './storage.js';
 import { generate, dailyWorkout, swapItem, singleWorkout, DURATIONS, FOCI } from './generator.js';
 import { startPlayer, estimateText } from './player.js';
 import { unlockAudio, speak, voiceAvailable } from './signals.js';
-import { h, icon, toast, confirmDialog, sheet } from './ui.js';
+import { h, icon, toast, confirmDialog, sheet, CAT_ICON } from './ui.js';
 
 const app = document.getElementById('app');
 const view = h('main', { class: 'view' });
-const nav = h('nav', { class: 'tabbar' });
+const nav = h('nav', { class: 'tabbar', 'aria-label': 'Hauptnavigation' });
 app.append(view, nav);
 
 const TABS = [
@@ -21,7 +21,8 @@ const TABS = [
 ];
 
 let currentWorkout = null;
-let libFilter = { cat: 'all', area: 'all', list: 'all', q: '' };
+const libFilter = { cat: 'all', area: 'all', list: 'all', q: '' };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 // ---------- Hilfen ----------
 const greet = () => {
@@ -30,37 +31,68 @@ const greet = () => {
 };
 const fmtDate = (d) => d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
 
-function thumb(e, cls = 'thumb') {
+function stage(e, cls = 'stage', opts = {}) {
   const box = h('div', { class: cls });
-  box.append(createFigure(e.anim, { animate: false, aspect: 1.35, label: cls !== 'mini' }).svg);
+  box.append(createFigure(e.anim, { animate: false, aspect: 1.35, ...opts }).svg);
   return box;
 }
 
-function catChip(e) {
-  const c = CATS[e.cat];
-  return h('span', { class: `chip cat-${e.cat}` }, `${c.icon} ${c.label}`);
+const catLabel = (c) => h('span', { class: `cat cat-${c}` }, [icon(CAT_ICON[c]), CATS[c].label]);
+
+function largeTitle(title, sub) {
+  return h('header', { class: 'large-title' }, [sub ? h('p', { class: 'overline' }, sub) : null, h('h1', {}, title)]);
 }
 
-function header(title, { back, right } = {}) {
-  return h('header', { class: 'topbar' }, [
-    back ? h('button', { class: 'icon-btn', 'aria-label': 'Zurück', onclick: back }, icon('back')) : null,
+function navBar(title, back) {
+  return h('header', { class: 'navbar' }, [
+    h('button', { class: 'nav-back', onclick: back }, [icon('back'), 'Zurück']),
     h('h1', {}, title),
-    right || null,
   ]);
+}
+
+// Gruppierte Liste im iOS-Stil
+function group(title, rows, footer) {
+  return h('section', { class: 'group' }, [
+    title ? h('h2', { class: 'group-title' }, title) : null,
+    h('div', { class: 'group-body' }, rows.filter(Boolean)),
+    footer ? h('p', { class: 'group-footer' }, footer) : null,
+  ]);
+}
+
+// Segmented Control (gleich breite Segmente, ein gleitender Daumen)
+function segmented(values, current, label, onChange, fmt = (v) => String(v)) {
+  const el = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': label, style: `--n:${values.length}` });
+  const paint = (cur) => {
+    const i = Math.max(0, values.indexOf(cur));
+    el.style.setProperty('--i', i);
+    el.replaceChildren(h('span', { class: 'seg-thumb', 'aria-hidden': 'true' }), ...values.map((v) => h('button', {
+      class: 'seg-item' + (v === cur ? ' on' : ''),
+      role: 'radio',
+      'aria-checked': String(v === cur),
+      onclick: () => { onChange(v); paint(v); },
+    }, fmt(v))));
+  };
+  paint(current);
+  return el;
 }
 
 function go(route) { location.hash = '#/' + route; }
 
 // ---------- Router ----------
+let cleanupView = null;
 function render() {
   const route = location.hash.replace(/^#\/?/, '').split('/')[0];
+  cleanupView?.();
+  cleanupView = null;
   view.replaceChildren();
   window.scrollTo(0, 0);
   const fn = { '': homeView, library: libraryView, history: historyView, settings: settingsView, preview: previewView }[route] || homeView;
   fn();
+  const activeRoute = route === 'preview' || route === 'workout' ? '' : route;
   nav.replaceChildren(...TABS.map((t) => h('a', {
     href: '#/' + t.route,
-    class: 'tab' + ((route === t.route || (route === 'preview' && t.route === '')) ? ' active' : ''),
+    class: 'tab' + (activeRoute === t.route ? ' active' : ''),
+    'aria-current': activeRoute === t.route ? 'page' : null,
   }, [icon(t.icon), h('span', {}, t.label)])));
 }
 window.addEventListener('hashchange', render);
@@ -78,53 +110,76 @@ function homeView() {
   const week = [];
   for (let k = 6; k >= 0; k--) {
     const d = new Date(); d.setDate(d.getDate() - k);
-    week.push(h('div', { class: 'wday' + (days.has(dateKey(d)) ? ' done' : '') + (k === 0 ? ' today' : '') }, [
-      h('span', {}, d.toLocaleDateString('de-DE', { weekday: 'narrow' })),
-      h('i'),
-    ]));
+    const done = days.has(dateKey(d));
+    week.push(h('div', {
+      class: 'wday' + (done ? ' done' : '') + (k === 0 ? ' today' : ''),
+      'aria-label': `${d.toLocaleDateString('de-DE', { weekday: 'long' })}: ${done ? 'erledigt' : 'offen'}`,
+    }, [h('span', {}, d.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '')), h('i', {}, done ? icon('check') : null)]));
+  }
+
+  // Signatur: die Figur des Tages zeigt nacheinander die Übungen des Workouts
+  const heroStage = h('div', { class: 'hero-stage' });
+  const heroCaption = h('p', { class: 'hero-caption' });
+  let k = 0;
+  const showFig = () => {
+    const e = BY_ID[daily.items[k % daily.items.length].id];
+    const fig = createFigure(e.anim, { aspect: 1.6, arrows: false, animate: !reduceMotion.matches });
+    fig.svg.classList.add('fade-in');
+    heroStage.replaceChildren(fig.svg);
+    heroCaption.replaceChildren(h('span', {}, `${(k % daily.items.length) + 1}/${daily.items.length}`), e.name);
+    k++;
+  };
+  showFig();
+  if (!reduceMotion.matches) {
+    const timer = setInterval(showFig, 5200);
+    cleanupView = () => clearInterval(timer);
   }
 
   let minutes = s.lastMinutes;
   let focus = s.lastFocus;
-  const durRow = h('div', { class: 'seg' });
-  const focusGrid = h('div', { class: 'focus-grid' });
-  const drawPickers = () => {
-    durRow.replaceChildren(...DURATIONS.map((m) => h('button', {
-      class: 'seg-btn' + (m === minutes ? ' on' : ''),
-      onclick: () => { minutes = m; store.setSetting('lastMinutes', m); drawPickers(); },
-    }, [h('b', {}, String(m)), h('small', {}, 'Min')])));
-    focusGrid.replaceChildren(...Object.entries(FOCI).map(([k, f]) => h('button', {
-      class: `focus-card f-${k}` + (k === focus ? ' on' : ''),
-      onclick: () => { focus = k; store.setSetting('lastFocus', k); drawPickers(); },
-    }, [h('span', { class: 'focus-ico' }, f.icon), h('b', {}, f.label), h('small', {}, f.desc)])));
-  };
-  drawPickers();
+  const focusList = h('div', { class: 'focus-grid', role: 'radiogroup', 'aria-label': 'Fokus' });
+  const drawFocus = () => focusList.replaceChildren(...Object.entries(FOCI).map(([key, f]) => h('button', {
+    class: `focus-card f-${key}` + (key === focus ? ' on' : ''),
+    role: 'radio',
+    'aria-checked': String(key === focus),
+    onclick: () => { focus = key; store.setSetting('lastFocus', key); drawFocus(); },
+  }, [
+    h('span', { class: `focus-ico cat-${key}` }, icon(CAT_ICON[key])),
+    h('span', { class: 'focus-txt' }, [h('b', {}, f.label), h('small', {}, f.desc)]),
+    h('span', { class: 'focus-check', 'aria-hidden': 'true' }, key === focus ? icon('check') : null),
+  ])));
+  drawFocus();
 
   view.append(
-    h('section', { class: 'hero' }, [
-      h('div', {}, [h('p', { class: 'muted' }, fmtDate(today)), h('h1', {}, `${greet()}!`)]),
-      h('div', { class: 'streak' + (streak ? ' hot' : '') }, [h('span', {}, '🔥'), h('b', {}, String(streak))]),
+    h('header', { class: 'large-title home-head' }, [
+      h('div', {}, [h('p', { class: 'overline' }, fmtDate(today)), h('h1', {}, greet())]),
+      h('div', { class: 'streak' + (streak ? ' hot' : ''), 'aria-label': `Serie: ${streak} Tage` }, [icon('flame'), h('b', {}, String(streak))]),
     ]),
     h('div', { class: 'week' }, week),
-    h('section', { class: 'card daily' }, [
-      h('div', { class: 'daily-head' }, [
-        h('div', {}, [h('p', { class: 'eyebrow' }, 'Workout des Tages'), h('h2', {}, daily.title)]),
-        doneToday ? h('span', { class: 'badge ok' }, [icon('check'), ' Erledigt']) : null,
+
+    h('section', { class: 'hero' }, [
+      heroStage,
+      h('div', { class: 'hero-body' }, [
+        heroCaption,
+        h('div', { class: 'hero-head' }, [
+          h('div', {}, [h('p', { class: 'overline accent' }, 'Workout des Tages'), h('h2', {}, daily.title)]),
+          doneToday ? h('span', { class: 'badge ok' }, [icon('check'), 'Erledigt']) : null,
+        ]),
+        h('p', { class: 'secondary' }, `${daily.items.length} Übungen · ${estimateText(daily)}`),
+        h('button', { class: 'btn primary big', onclick: () => { currentWorkout = daily; go('preview'); } }, [icon('play'), doneToday ? 'Nochmal machen' : 'Starten']),
       ]),
-      h('p', { class: 'muted' }, `${daily.items.length} Übungen · ${estimateText(daily)}`),
-      h('div', { class: 'thumb-row' }, daily.items.slice(0, 5).map((it) => thumb(BY_ID[it.id], 'mini'))),
-      h('button', { class: 'btn primary big', onclick: () => { currentWorkout = daily; go('preview'); } }, [icon('play'), doneToday ? ' Nochmal machen' : ' Starten']),
     ]),
-    h('section', { class: 'card' }, [
-      h('h2', {}, 'Eigenes Workout'),
-      h('p', { class: 'label' }, 'Wie viel Zeit hast du?'),
-      durRow,
-      h('p', { class: 'label' }, 'Worauf liegt der Fokus?'),
-      focusGrid,
+
+    h('section', { class: 'section' }, [
+      h('h2', { class: 'section-title' }, 'Eigenes Workout'),
+      h('p', { class: 'field-label' }, 'Zeit'),
+      segmented(DURATIONS, minutes, 'Dauer in Minuten', (v) => { minutes = v; store.setSetting('lastMinutes', v); }, (v) => `${v} Min`),
+      h('p', { class: 'field-label' }, 'Fokus'),
+      focusList,
       h('button', {
-        class: 'btn primary big',
+        class: 'btn tinted big',
         onclick: () => { currentWorkout = generate({ minutes, focus }); go('preview'); },
-      }, [icon('shuffle'), ' Workout erstellen']),
+      }, [icon('shuffle'), 'Workout erstellen']),
     ]),
   );
 }
@@ -133,23 +188,23 @@ function homeView() {
 function previewView() {
   const w = currentWorkout;
   if (!w) { go(''); return; }
-  const list = h('ol', { class: 'ex-list' });
-  const sub = h('p', { class: 'muted' });
+  const list = h('div', { class: 'group-body' });
+  const sub = h('p', { class: 'secondary' });
 
   const draw = () => {
     sub.textContent = `${w.items.length} Übungen · ${estimateText(w)}`;
     list.replaceChildren(...w.items.map((it, i) => {
       const e = BY_ID[it.id];
-      return h('li', { class: 'ex-row' }, [
+      return h('div', { class: 'row ex-row' }, [
         h('button', { class: 'ex-main', onclick: () => openDetail(e) }, [
-          thumb(e, 'thumb sm'),
-          h('div', { class: 'ex-txt' }, [
+          stage(e, 'stage sm', { label: false }),
+          h('span', { class: 'ex-txt' }, [
             h('b', {}, e.name),
-            h('span', { class: 'muted' }, [h('i', { class: `dot cat-${e.cat}` }), formatAmountItem(e, it)]),
+            h('span', { class: 'meta' }, [catLabel(e.cat), formatAmountItem(e, it)]),
           ]),
         ]),
         w.single ? null : h('button', {
-          class: 'icon-btn', 'aria-label': 'Übung austauschen',
+          class: 'icon-btn plain', 'aria-label': `${e.name} austauschen`,
           onclick: () => { if (swapItem(w, i)) draw(); else toast('Keine Alternative verfügbar'); },
         }, icon('swap')),
       ]);
@@ -159,14 +214,14 @@ function previewView() {
 
   const title = w.title || (w.single ? 'Einzelübung' : `${w.minutes} Min · ${FOCI[w.focus]?.label || ''}`);
   view.append(
-    header(title, { back: () => history.length > 1 ? history.back() : go('') }),
+    navBar(title, () => (history.length > 1 ? history.back() : go(''))),
     sub,
-    list,
-    h('div', { class: 'sticky-actions' }, [
+    h('section', { class: 'group' }, list),
+    h('div', { class: 'action-bar' }, [
       (w.daily || w.single) ? null : h('button', {
-        class: 'btn ghost', onclick: () => { currentWorkout = generate({ minutes: w.minutes, focus: w.focus }); previewView.redraw(); },
-      }, [icon('shuffle'), ' Neu mischen']),
-      h('button', { class: 'btn primary big', onclick: () => start(w) }, [icon('play'), ' Start']),
+        class: 'btn tinted', onclick: () => { currentWorkout = generate({ minutes: w.minutes, focus: w.focus }); previewView.redraw(); },
+      }, [icon('shuffle'), 'Neu mischen']),
+      h('button', { class: 'btn primary grow', onclick: () => start(w) }, [icon('play'), 'Start']),
     ]),
   );
 }
@@ -184,33 +239,37 @@ function start(w) {
 
 // ---------- Übungsdetail ----------
 function openDetail(e) {
-  const fav = h('button', { class: 'btn ghost' + (store.isFav(e.id) ? ' on' : '') });
-  const hid = h('button', { class: 'btn ghost' + (store.isHidden(e.id) ? ' on' : '') });
+  const fav = h('button', { class: 'btn toggle' });
+  const hid = h('button', { class: 'btn toggle' });
   const paint = () => {
-    fav.className = 'btn ghost toggle' + (store.isFav(e.id) ? ' on fav' : '');
-    fav.replaceChildren(icon('heart'), store.isFav(e.id) ? ' Favorit' : ' Favorisieren');
-    hid.className = 'btn ghost toggle' + (store.isHidden(e.id) ? ' on hid' : '');
-    hid.replaceChildren(icon(store.isHidden(e.id) ? 'eyeoff' : 'eye'), store.isHidden(e.id) ? ' Ausgeblendet' : ' Ausblenden');
+    const f = store.isFav(e.id), x = store.isHidden(e.id);
+    fav.className = 'btn toggle' + (f ? ' on fav' : '');
+    fav.setAttribute('aria-pressed', String(f));
+    fav.replaceChildren(icon('heart'), f ? 'Favorit' : 'Favorisieren');
+    hid.className = 'btn toggle' + (x ? ' on hid' : '');
+    hid.setAttribute('aria-pressed', String(x));
+    hid.replaceChildren(icon(x ? 'eyeoff' : 'eye'), x ? 'Ausgeblendet' : 'Ausblenden');
   };
   fav.onclick = () => { store.toggleFav(e.id); paint(); };
   hid.onclick = () => { store.toggleHidden(e.id); paint(); };
   paint();
 
-  const figBox = h('div', { class: 'detail-fig' });
-  figBox.append(createFigure(e.anim, { aspect: 1.4 }).svg);
+  const figBox = h('div', { class: 'detail-stage' });
+  figBox.append(createFigure(e.anim, { aspect: 1.4, animate: !reduceMotion.matches }).svg);
   const s = sheet(h('div', { class: 'detail' }, [
     figBox,
-    h('h2', {}, e.name),
+    h('h2', { class: 'detail-title' }, e.name),
     h('div', { class: 'chips' }, [
-      ...e.cats.map((c) => h('span', { class: `chip cat-${c}` }, `${CATS[c].icon} ${CATS[c].label}`)),
+      ...e.cats.map((c) => h('span', { class: 'chip' }, catLabel(c))),
       ...e.areas.map((a) => h('span', { class: 'chip' }, AREAS[a])),
-      e.wall ? h('span', { class: 'chip' }, [icon('wall'), ' Wand']) : null,
+      e.wall ? h('span', { class: 'chip' }, [icon('wall'), 'Wand']) : null,
     ]),
-    h('p', { class: 'amount' }, [icon('clock'), ' ', formatAmount(e)]),
+    h('p', { class: 'amount' }, [icon('clock'), formatAmount(e)]),
+    h('h3', { class: 'sub-title' }, 'So geht’s'),
     h('ol', { class: 'steps' }, e.steps.map((t) => h('li', {}, t))),
-    h('p', { class: 'tip' }, '💡 ' + e.tip),
+    h('p', { class: 'tip' }, [icon('bulb'), h('span', {}, e.tip)]),
     h('div', { class: 'detail-actions' }, [fav, hid]),
-    h('button', { class: 'btn primary big', onclick: () => { s.close(); currentWorkout = singleWorkout(e.id); start(currentWorkout); } }, [icon('play'), ' Jetzt üben']),
+    h('button', { class: 'btn primary big', onclick: () => { s.close(); currentWorkout = singleWorkout(e.id); start(currentWorkout); } }, [icon('play'), 'Jetzt üben']),
   ]), { onClose: () => { if (location.hash.startsWith('#/library')) drawLibrary?.(); } });
 }
 
@@ -218,16 +277,17 @@ function openDetail(e) {
 let drawLibrary = null;
 function libraryView() {
   const grid = h('div', { class: 'lib-grid' });
-  const count = h('p', { class: 'muted small' });
-  const search = h('input', { type: 'search', placeholder: 'Übung suchen…', value: libFilter.q, class: 'search' });
+  const count = h('p', { class: 'tertiary small' });
+  const search = h('input', { type: 'search', placeholder: 'Suchen', value: libFilter.q, 'aria-label': 'Übung suchen', enterkeyhint: 'search' });
   search.addEventListener('input', () => { libFilter.q = search.value; draw(); });
 
-  const chipRow = (opts, key) => {
-    const row = h('div', { class: 'chip-row' });
-    const paint = () => row.replaceChildren(...opts.map(([v, label]) => h('button', {
-      class: 'chip btn-chip' + (libFilter[key] === v ? ' on' : ''),
+  const chipRow = (opts, key, label) => {
+    const row = h('div', { class: 'chip-row', role: 'group', 'aria-label': label });
+    const paint = () => row.replaceChildren(...opts.map(([v, content]) => h('button', {
+      class: 'filter' + (libFilter[key] === v ? ' on' : ''),
+      'aria-pressed': String(libFilter[key] === v),
       onclick: () => { libFilter[key] = v; paint(); draw(); },
-    }, label)));
+    }, content)));
     paint();
     return row;
   };
@@ -239,27 +299,28 @@ function libraryView() {
       (libFilter.area === 'all' || e.areas.includes(libFilter.area)) &&
       (libFilter.list === 'all' ? true : libFilter.list === 'fav' ? store.isFav(e.id) : store.isHidden(e.id)) &&
       (!q || e.name.toLowerCase().includes(q)));
-    count.textContent = `${list.length} Übungen`;
+    count.textContent = list.length === 1 ? '1 Übung' : `${list.length} Übungen`;
     grid.replaceChildren(...list.map((e) => h('button', {
       class: 'lib-card' + (store.isHidden(e.id) ? ' hidden-ex' : ''),
       onclick: () => openDetail(e),
     }, [
-      thumb(e),
-      store.isFav(e.id) ? h('span', { class: 'fav-dot' }, icon('heart')) : null,
-      store.isHidden(e.id) ? h('span', { class: 'fav-dot hid' }, icon('eyeoff')) : null,
+      stage(e, 'stage', { label: false }),
+      store.isFav(e.id) ? h('span', { class: 'badge-ico fav', 'aria-label': 'Favorit' }, icon('heart')) : null,
+      store.isHidden(e.id) ? h('span', { class: 'badge-ico', 'aria-label': 'Ausgeblendet' }, icon('eyeoff')) : null,
       h('b', {}, e.name),
-      h('span', { class: 'muted small' }, [h('i', { class: `dot cat-${e.cat}` }), formatAmount(e)]),
+      h('span', { class: 'meta' }, [catLabel(e.cat)]),
+      h('span', { class: 'tertiary small' }, formatAmount(e)),
     ])));
-    if (!list.length) grid.append(h('p', { class: 'empty muted' }, libFilter.list === 'fav' ? 'Noch keine Favoriten – tippe bei einer Übung auf das Herz.' : libFilter.list === 'hidden' ? 'Keine ausgeblendeten Übungen.' : 'Nichts gefunden.'));
+    if (!list.length) grid.append(h('p', { class: 'empty' }, libFilter.list === 'fav' ? 'Noch keine Favoriten. Tippe bei einer Übung auf „Favorisieren“, dann kommt sie öfter dran.' : libFilter.list === 'hidden' ? 'Keine ausgeblendeten Übungen.' : 'Keine Übung gefunden. Probier einen anderen Suchbegriff oder Filter.'));
   };
   drawLibrary = draw;
 
   view.append(
-    header('Übungen'),
-    search,
-    chipRow([['all', 'Alle'], ...Object.entries(CATS).map(([k, c]) => [k, `${c.icon} ${c.label}`])], 'cat'),
-    chipRow([['all', 'Alle Bereiche'], ...Object.entries(AREAS)], 'area'),
-    chipRow([['all', 'Alle'], ['fav', '❤️ Favoriten'], ['hidden', '🚫 Ausgeblendet']], 'list'),
+    largeTitle('Übungen'),
+    h('label', { class: 'searchbar' }, [icon('search'), search]),
+    chipRow([['all', 'Alle'], ...Object.keys(CATS).map((k) => [k, catLabel(k)])], 'cat', 'Kategorie'),
+    chipRow([['all', 'Alle Bereiche'], ...Object.entries(AREAS)], 'area', 'Körperbereich'),
+    chipRow([['all', 'Alle'], ['fav', [icon('heart'), 'Favoriten']], ['hidden', [icon('eyeoff'), 'Ausgeblendet']]], 'list', 'Liste'),
     count,
     grid,
   );
@@ -281,14 +342,18 @@ function historyView() {
     const cells = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => h('span', { class: 'cal-h' }, d));
     for (let i = 0; i < offset; i++) cells.push(h('span'));
     for (let d = 1; d <= daysIn; d++) {
-      const k = dateKey(new Date(y, m, d));
-      cells.push(h('span', { class: 'cal-d' + (done.has(k) ? ' done' : '') + (k === todayKey ? ' today' : '') }, String(d)));
+      const key = dateKey(new Date(y, m, d));
+      const isDone = done.has(key);
+      cells.push(h('span', {
+        class: 'cal-d' + (isDone ? ' done' : '') + (key === todayKey ? ' today' : ''),
+        'aria-label': `${d}.${isDone ? ' erledigt' : ''}`,
+      }, String(d)));
     }
     cal.replaceChildren(
       h('div', { class: 'cal-nav' }, [
-        h('button', { class: 'icon-btn', 'aria-label': 'Voriger Monat', onclick: () => { calMonth = new Date(y, m - 1, 1); drawCal(); } }, icon('back')),
+        h('button', { class: 'icon-btn plain', 'aria-label': 'Voriger Monat', onclick: () => { calMonth = new Date(y, m - 1, 1); drawCal(); } }, icon('back')),
         h('b', {}, first.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })),
-        h('button', { class: 'icon-btn', 'aria-label': 'Nächster Monat', onclick: () => { calMonth = new Date(y, m + 1, 1); drawCal(); } }, icon('chevron')),
+        h('button', { class: 'icon-btn plain', 'aria-label': 'Nächster Monat', onclick: () => { calMonth = new Date(y, m + 1, 1); drawCal(); } }, icon('chevron')),
       ]),
       h('div', { class: 'cal-grid' }, cells),
     );
@@ -296,23 +361,26 @@ function historyView() {
   drawCal();
 
   const recent = store.state.history.slice(-15).reverse();
+  const stat = (value, label, hot) => h('div', { class: 'stat' + (hot ? ' hot' : '') }, [h('b', {}, value), h('span', {}, label)]);
   view.append(
-    header('Verlauf'),
-    h('div', { class: 'stats grid4' }, [
-      h('div', { class: 'stat hot' }, [h('b', {}, `🔥 ${store.streak()}`), h('span', {}, 'Aktuelle Serie')]),
-      h('div', { class: 'stat' }, [h('b', {}, String(store.bestStreak())), h('span', {}, 'Beste Serie')]),
-      h('div', { class: 'stat' }, [h('b', {}, String(t.workouts)), h('span', {}, 'Workouts')]),
-      h('div', { class: 'stat' }, [h('b', {}, String(t.minutes)), h('span', {}, 'Minuten')]),
+    largeTitle('Verlauf'),
+    h('div', { class: 'stats' }, [
+      stat([icon('flame'), String(store.streak())], 'Aktuelle Serie', true),
+      stat(String(store.bestStreak()), 'Beste Serie'),
+      stat(String(t.workouts), 'Workouts'),
+      stat(String(t.minutes), 'Minuten'),
     ]),
     h('section', { class: 'card' }, cal),
-    h('h2', { class: 'section-title' }, 'Letzte Workouts'),
-    recent.length ? h('ul', { class: 'hist' }, recent.map((r) => h('li', {}, [
-      h('div', {}, [
-        h('b', {}, `${FOCI[r.focus]?.icon || '•'} ${r.daily ? 'Workout des Tages' : FOCI[r.focus]?.label || 'Workout'}`),
-        h('span', { class: 'muted small' }, new Date(r.ts).toLocaleString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })),
-      ]),
-      h('span', { class: 'muted' }, `${Math.max(1, Math.round((r.seconds || 0) / 60))} Min · ${r.ex?.length || 0} Üb.`),
-    ]))) : h('p', { class: 'empty muted' }, 'Noch keine Workouts – dein erstes wartet auf der Startseite!'),
+    recent.length
+      ? group('Letzte Workouts', recent.map((r) => h('div', { class: 'row' }, [
+        h('span', { class: `row-ico cat-${r.focus}` }, icon(CAT_ICON[r.focus] || 'sparkle')),
+        h('div', { class: 'row-txt' }, [
+          h('b', {}, r.daily ? 'Workout des Tages' : FOCI[r.focus]?.label || 'Workout'),
+          h('span', { class: 'secondary small' }, new Date(r.ts).toLocaleString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })),
+        ]),
+        h('span', { class: 'secondary small nowrap' }, `${Math.max(1, Math.round((r.seconds || 0) / 60))} Min · ${r.ex?.length || 0} Üb.`),
+      ])))
+      : h('p', { class: 'empty' }, 'Noch keine Workouts. Dein erstes wartet auf der Startseite.'),
   );
 }
 
@@ -323,57 +391,47 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 function settingsView() {
   const s = store.settings;
   const toggle = (key, label, desc) => h('label', { class: 'row' }, [
-    h('div', {}, [h('b', {}, label), desc ? h('span', { class: 'muted small' }, desc) : null]),
-    h('input', { type: 'checkbox', class: 'switch', checked: !!s[key], onchange: (ev) => store.setSetting(key, ev.target.checked) }),
+    h('div', { class: 'row-txt' }, [h('span', {}, label), desc ? h('span', { class: 'secondary small' }, desc) : null]),
+    h('input', { type: 'checkbox', role: 'switch', class: 'switch', checked: !!s[key], onchange: (ev) => store.setSetting(key, ev.target.checked) }),
   ]);
-  const choice = (key, label, values, unit) => {
-    const row = h('div', { class: 'seg small' });
-    const paint = () => row.replaceChildren(...values.map((v) => h('button', {
-      class: 'seg-btn' + (s[key] === v ? ' on' : ''), onclick: () => { store.setSetting(key, v); paint(); },
-    }, `${v} ${unit}`)));
-    paint();
-    return h('div', { class: 'row col' }, [h('b', {}, label), row]);
-  };
+  const choice = (key, label, values, unit) => h('div', { class: 'row col' }, [
+    h('span', {}, label),
+    segmented(values, s[key], label, (v) => store.setSetting(key, v), (v) => `${v} ${unit}`),
+  ]);
+  const action = (label, onclick, cls = '') => h('button', { class: 'row row-action ' + cls, onclick }, label);
 
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   view.append(
-    header('Einstellungen'),
-    h('section', { class: 'card list' }, [
-      toggle('sound', 'Töne', 'Countdown-Pieptöne in den letzten Sekunden'),
-      toggle('vibrate', 'Vibration', 'Beim Übungswechsel (Android)'),
+    largeTitle('Einstellungen'),
+    group('Während des Workouts', [
+      toggle('sound', 'Töne', 'Pieptöne in den letzten 3 Sekunden'),
+      toggle('vibrate', 'Vibration', 'Beim Übungswechsel (nur Android)'),
       voiceAvailable() ? toggle('voice', 'Sprachansage', 'Sagt die nächste Übung an') : null,
-      voiceAvailable() ? h('button', { class: 'btn ghost small', onclick: () => { unlockAudio(); speak('Als Nächstes: Glute Bridge. 15 Wiederholungen.'); } }, 'Ansage testen') : null,
-      toggle('wall', 'Übungen mit Wand', 'z. B. Wall Sit oder Couch Stretch vorschlagen'),
+      voiceAvailable() ? action('Ansage testen', () => { unlockAudio(); speak('Als Nächstes: Glute Bridge. 15 Wiederholungen.'); }) : null,
     ]),
-    h('section', { class: 'card list' }, [
-      choice('rest', 'Vorbereitungszeit zwischen Übungen', [5, 10, 15, 20], 's'),
+    group('Workouts', [
+      toggle('wall', 'Übungen mit Wand', 'z. B. Wall Sit oder Couch Stretch'),
+      choice('rest', 'Vorbereitung zwischen Übungen', [5, 10, 15, 20], 's'),
       choice('dailyMinutes', 'Länge des Workouts des Tages', [3, 5, 10, 15], 'Min'),
     ]),
-    standalone ? null : h('section', { class: 'card list' }, [
-      h('b', {}, 'Als App installieren'),
+    standalone ? null : group('App installieren', [
       installEvent
-        ? h('button', { class: 'btn primary', onclick: async () => { installEvent.prompt(); installEvent = null; } }, [icon('download'), ' Installieren'])
-        : h('p', { class: 'muted small' }, ios
-          ? 'In Safari unten auf „Teilen“ tippen und „Zum Home-Bildschirm“ wählen.'
-          : 'Im Browser-Menü (⋮) „App installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen.'),
-    ]),
-    h('section', { class: 'card list' }, [
-      h('b', {}, 'Daten'),
-      h('p', { class: 'muted small' }, `${store.state.favorites.length} Favoriten · ${store.state.hidden.length} ausgeblendet · alles nur lokal auf diesem Gerät gespeichert.`),
-      h('button', {
-        class: 'btn ghost small', onclick: async () => {
-          if (await confirmDialog('Listen zurücksetzen?', 'Alle Favoriten und ausgeblendeten Übungen werden gelöscht.', 'Zurücksetzen')) { store.resetLists(); render(); toast('Listen zurückgesetzt'); }
-        },
-      }, 'Favoriten & Ausgeblendete zurücksetzen'),
-      h('button', {
-        class: 'btn ghost small danger', onclick: async () => {
-          if (await confirmDialog('Alles löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden unwiderruflich gelöscht.', 'Alles löschen')) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
-        },
-      }, 'Alle Daten löschen'),
-    ]),
-    h('p', { class: 'muted small foot' }, 'Hinweis: Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.0'),
+        ? action('Auf dem Startbildschirm installieren', async () => { installEvent.prompt(); installEvent = null; })
+        : h('div', { class: 'row' }, h('span', { class: 'secondary' }, ios
+          ? 'In Safari auf „Teilen“ tippen und „Zum Home-Bildschirm“ wählen.'
+          : 'Im Browser-Menü (⋮) „App installieren“ wählen.')),
+    ], 'Als App startet MoveDaily im Vollbild und funktioniert auch offline.'),
+    group('Daten', [
+      action('Favoriten und Ausgeblendete zurücksetzen', async () => {
+        if (await confirmDialog('Listen zurücksetzen?', 'Alle Favoriten und ausgeblendeten Übungen werden entfernt.', 'Zurücksetzen', 'Abbrechen', { destructive: true })) { store.resetLists(); render(); toast('Listen zurückgesetzt'); }
+      }),
+      action('Alle Daten löschen', async () => {
+        if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
+      }, 'destructive'),
+    ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.1'),
   );
 }
 

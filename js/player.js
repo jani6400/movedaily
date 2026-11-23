@@ -5,7 +5,7 @@ import { createFigure, mirror } from './figure.js';
 import { store } from './storage.js';
 import { workoutSeconds } from './generator.js';
 import * as sig from './signals.js';
-import { h, icon, confirmDialog, toast } from './ui.js';
+import { h, icon, confirmDialog, toast, CAT_ICON } from './ui.js';
 
 const RING = 2 * Math.PI * 54;
 const SWITCH_SECS = 5;
@@ -76,15 +76,20 @@ export function startPlayer(workout, { onExit }) {
   const figBox = h('div', { class: 'p-figure' });
   const name = h('h2', { class: 'p-name' });
   const meta = h('div', { class: 'p-meta' });
-  const ringFg = h('circle', { class: 'ring-fg', cx: 60, cy: 60, r: 54, 'stroke-dasharray': RING.toFixed(1) }, [], true);
+  const ringFg = h('circle', { class: 'ring-fg', cx: 60, cy: 60, r: 54, 'stroke-dasharray': RING.toFixed(1), stroke: 'url(#ringGrad)' }, [], true);
   const ringNum = h('div', { class: 'ring-num' });
   const ringSub = h('div', { class: 'ring-sub' });
   const ring = h('div', { class: 'ring' }, [
-    h('svg', { viewBox: '0 0 120 120' }, [h('circle', { class: 'ring-bg', cx: 60, cy: 60, r: 54 }, [], true), ringFg], true),
+    h('svg', { viewBox: '0 0 120 120', 'aria-hidden': 'true' }, [
+      h('defs', {}, h('linearGradient', { id: 'ringGrad', x1: '0', y1: '0', x2: '1', y2: '1' }, [
+        h('stop', { offset: '0', 'stop-color': '#FF4136' }, [], true),
+        h('stop', { offset: '1', 'stop-color': '#FF851B' }, [], true),
+      ], true), true),
+      h('circle', { class: 'ring-bg', cx: 60, cy: 60, r: 54 }, [], true), ringFg], true),
     h('div', { class: 'ring-txt' }, [ringNum, ringSub]),
   ]);
-  const doneBtn = h('button', { class: 'btn primary big p-done', onclick: next }, ['Fertig ', icon('check')]);
-  const goBtn = h('button', { class: 'btn ghost p-go', onclick: next }, ['Los geht’s ', icon('next')]);
+  const doneBtn = h('button', { class: 'btn primary big p-done', onclick: next }, [icon('check'), 'Fertig']);
+  const goBtn = h('button', { class: 'btn tinted p-go', onclick: next }, ['Los geht’s', icon('next')]);
   const breath = h('div', { class: 'p-breath' });
   const stepsList = h('ol', { class: 'p-steps' });
   const tip = h('p', { class: 'p-tip' });
@@ -93,7 +98,7 @@ export function startPlayer(workout, { onExit }) {
   const btnPrev = h('button', { class: 'icon-btn lg', 'aria-label': 'Zurück', onclick: prev }, icon('prev'));
   const btnPause = h('button', { class: 'icon-btn xl accent', 'aria-label': 'Pause', onclick: togglePause }, icon('pause'));
   const btnNext = h('button', { class: 'icon-btn lg', 'aria-label': 'Weiter', onclick: next }, icon('next'));
-  const btnFav = h('button', { class: 'icon-btn', 'aria-label': 'Favorit', onclick: fav }, icon('heart'));
+  const btnFav = h('button', { class: 'icon-btn', 'aria-label': 'Favorit', 'aria-pressed': 'false', onclick: fav }, icon('heart'));
   const btnHide = h('button', { class: 'icon-btn', 'aria-label': 'Ausblenden', onclick: hide }, icon('eyeoff'));
 
   root.append(
@@ -131,17 +136,18 @@ export function startPlayer(workout, { onExit }) {
     // Texte
     name.textContent = e.name;
     const cat = CATS[e.cat];
-    const chips = [h('span', { class: `chip cat-${e.cat}` }, `${cat.icon} ${cat.label}`), h('span', { class: 'chip' }, amountText(e, it))];
+    const chips = [h('span', { class: 'chip' }, h('span', { class: `cat cat-${e.cat}` }, [icon(CAT_ICON[e.cat]), cat.label])), h('span', { class: 'chip' }, amountText(e, it))];
     if (s.kind === 'work' && s.side) chips.push(h('span', { class: 'chip side' }, s.side === 1 ? 'Seite 1' : 'Seite 2'));
     meta.replaceChildren(...chips);
     stepsList.replaceChildren(...e.steps.map((t) => h('li', {}, t)));
-    tip.textContent = '💡 ' + e.tip;
+    tip.replaceChildren(icon('bulb'), h('span', {}, e.tip));
     howto.open = s.kind === 'prep';
     counter.textContent = `${s.i + 1}/${workout.items.length}`;
     [...segs.children].forEach((el, k) => {
       el.className = k < s.i || doneItems.has(k) ? 'done' : k === s.i ? 'cur' : '';
     });
     btnFav.classList.toggle('on', store.isFav(e.id));
+    btnFav.setAttribute('aria-pressed', String(store.isFav(e.id)));
 
     root.dataset.kind = s.kind;
     root.dataset.type = s.dur ? 'time' : 'reps';
@@ -208,6 +214,7 @@ export function startPlayer(workout, { onExit }) {
     const e = BY_ID[workout.items[cur().i].id];
     const on = store.toggleFav(e.id);
     btnFav.classList.toggle('on', on);
+    btnFav.setAttribute('aria-pressed', String(on));
     toast(on ? `❤️ ${e.name} kommt jetzt öfter dran` : 'Aus Favoriten entfernt');
   }
 
@@ -215,7 +222,7 @@ export function startPlayer(workout, { onExit }) {
     const e = BY_ID[workout.items[cur().i].id];
     const wasPaused = pausedAt !== null;
     if (!wasPaused) togglePause();
-    const ok = await confirmDialog(`„${e.name}“ ausblenden?`, 'Die Übung wird in künftigen Workouts nicht mehr vorgeschlagen. Du kannst das in der Bibliothek rückgängig machen.', 'Ausblenden');
+    const ok = await confirmDialog(`„${e.name}“ ausblenden?`, 'Die Übung wird in künftigen Workouts nicht mehr vorgeschlagen. Du kannst das in der Bibliothek rückgängig machen.', 'Ausblenden', 'Abbrechen', { destructive: true });
     if (ok) {
       if (!store.isHidden(e.id)) store.toggleHidden(e.id);
       toast('Übung ausgeblendet');
@@ -230,7 +237,7 @@ export function startPlayer(workout, { onExit }) {
     if (!wasPaused) togglePause();
     const ok = await confirmDialog('Workout beenden?', doneItems.size >= Math.ceil(workout.items.length / 2)
       ? 'Du hast schon mehr als die Hälfte geschafft – das zählt für heute!'
-      : 'Dein Fortschritt für dieses Workout wird nicht gespeichert.', 'Beenden');
+      : 'Dein Fortschritt für dieses Workout wird nicht gespeichert.', 'Beenden', 'Weiter trainieren', { destructive: true });
     if (!ok) { if (!wasPaused) togglePause(); return; }
     if (doneItems.size >= Math.ceil(workout.items.length / 2)) finish();
     else close();
@@ -276,13 +283,13 @@ export function startPlayer(workout, { onExit }) {
     const mins = Math.floor(seconds / 60), secs = seconds % 60;
     root.replaceChildren(h('div', { class: 'p-finish' }, [
       h('div', { class: 'confetti' }, Array.from({ length: 28 }, () => h('i', { style: `--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.4).toFixed(2)}s;--r:${Math.round(Math.random() * 360)}deg` }))),
-      h('div', { class: 'finish-badge' }, '🎉'),
+      h('div', { class: 'finish-badge' }, icon('check')),
       h('h1', {}, 'Geschafft!'),
-      h('p', { class: 'muted' }, 'Stark, dass du heute drangeblieben bist.'),
+      h('p', { class: 'secondary' }, 'Stark, dass du heute drangeblieben bist.'),
       h('div', { class: 'stats' }, [
         h('div', { class: 'stat' }, [h('b', {}, `${mins}:${String(secs).padStart(2, '0')}`), h('span', {}, 'Dauer')]),
         h('div', { class: 'stat' }, [h('b', {}, String(count)), h('span', {}, 'Übungen')]),
-        h('div', { class: 'stat hot' }, [h('b', {}, `🔥 ${streak}`), h('span', {}, streak === 1 ? 'Tag Serie' : 'Tage Serie')]),
+        h('div', { class: 'stat hot' }, [h('b', {}, [icon('flame'), String(streak)]), h('span', {}, streak === 1 ? 'Tag Serie' : 'Tage Serie')]),
       ]),
       h('button', { class: 'btn primary big', onclick: () => exit({ seconds, count }) }, 'Zurück zur Übersicht'),
     ]));
