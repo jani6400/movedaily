@@ -10,7 +10,8 @@ const DEFAULT_SETTINGS = {
   wall: true, // Übungen mit Wand erlauben
   dailyMinutes: 5,
   lastMinutes: 5,
-  lastFocus: 'mix',
+  lastFocus: 'stretch',
+  voiceName: '', // leer = automatisch die beste (männliche) Stimme
 };
 
 function fresh() {

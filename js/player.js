@@ -14,7 +14,7 @@ const BOX = ['Einatmen', 'Halten', 'Ausatmen', 'Halten'];
 const mirroredAnims = new Map();
 function animFor(e, side) {
   if (side !== 2) return e.anim;
-  if (!mirroredAnims.has(e.id)) mirroredAnims.set(e.id, { ...e.anim, frames: e.anim.frames.map(mirror), wall: e.anim.wall === 'left' ? 'right' : e.anim.wall === 'right' ? 'left' : undefined });
+  if (!mirroredAnims.has(e.id)) mirroredAnims.set(e.id, { ...e.anim, frames: e.anim.frames.map(mirror), wall: e.anim.wall === 'left' ? 'right' : e.anim.wall === 'right' ? 'left' : undefined, mirrored: !e.anim.mirrored });
   return mirroredAnims.get(e.id);
 }
 
@@ -59,6 +59,7 @@ export function startPlayer(workout, { onExit }) {
   let pausedAt = null;
   let lastSec = null;
   let halfSaid = false;
+  let tenSaid = false;
   let breathPhase = -1;
   let fig = null;
   let figKey = '';
@@ -117,6 +118,7 @@ export function startPlayer(workout, { onExit }) {
     if (pausedAt !== null) pausedAt = stepStart;
     lastSec = null;
     halfSaid = false;
+    tenSaid = false;
     breathPhase = -1;
     const s = cur();
     const it = workout.items[s.i];
@@ -157,18 +159,19 @@ export function startPlayer(workout, { onExit }) {
 
     // Ansagen
     if (s.kind === 'prep') {
-      const intro = s.i === 0 ? 'Los geht’s. Erste Übung: ' : s.i === workout.items.length - 1 ? 'Letzte Übung: ' : 'Als Nächstes: ';
-      sig.speak(`${intro}${e.name}. ${amountText(e, it, true)}.`);
+      const say = s.i === 0 ? sig.PHRASES.first : s.i === workout.items.length - 1 ? sig.PHRASES.last : sig.PHRASES.next;
+      sig.speak(say(e.name, amountText(e, it, true)));
     } else if (s.kind === 'switch') {
-      sig.speak('Seite wechseln.');
+      sig.sideSwitch();
+      sig.speak(sig.PHRASES.switch());
       sig.vibrate([80, 60, 80]);
     } else {
       sig.go();
       sig.vibrate(200);
-      if (s.reps) sig.speak(s.side === 2 ? `Andere Seite. ${s.reps} Wiederholungen.` : `${s.reps} Wiederholungen. Tippe auf Fertig, wenn du durch bist.`);
-      else if (s.side === 1) sig.speak('Erste Seite. Los!');
-      else if (s.side === 2) sig.speak('Und los!');
-      else if (e.breath !== 'box') sig.speak('Los!');
+      if (s.reps) sig.speak(s.side === 2 ? `${sig.PHRASES.side2()} ${s.reps} Wiederholungen.` : sig.PHRASES.reps(s.reps));
+      else if (s.side === 1) sig.speak(sig.PHRASES.side1());
+      else if (s.side === 2) sig.speak(sig.PHRASES.side2());
+      else if (e.breath !== 'box') sig.speak(sig.PHRASES.start());
     }
     update();
   }
@@ -274,7 +277,7 @@ export function startPlayer(workout, { onExit }) {
     store.addHistory({ minutes: workout.minutes, seconds, focus: workout.focus, ex: ids, daily: !!workout.daily });
     sig.finish();
     sig.vibrate([100, 80, 100, 80, 250]);
-    sig.speak('Geschafft! Super gemacht.');
+    sig.speak(sig.PHRASES.done());
     showDone(seconds, ids.length);
   }
 
@@ -312,9 +315,13 @@ export function startPlayer(workout, { onExit }) {
         if (lastSec !== null && sec <= 3 && sec > 0) sig.tick();
         lastSec = sec;
       }
+      if (pausedAt === null && s.kind === 'work' && !tenSaid && s.dur >= 40 && !e.breath && left <= 10.5 && left > 9) {
+        tenSaid = true;
+        sig.speak(sig.PHRASES.tenLeft(), { interrupt: false });
+      }
       if (pausedAt === null && s.kind === 'work' && !halfSaid && s.dur >= 30 && !e.breath && t >= s.dur / 2) {
         halfSaid = true;
-        sig.speak('Halbzeit.', { interrupt: false });
+        sig.speak(sig.PHRASES.half(), { interrupt: false });
       }
       if (s.kind === 'work' && e.breath === 'box') {
         const ph = Math.floor(t / 4) % 4;
@@ -326,7 +333,7 @@ export function startPlayer(workout, { onExit }) {
         }
       }
       if (left <= 0 && pausedAt === null) {
-        if (s.kind === 'work') { sig.beep(520, 0.25); sig.vibrate([100, 60, 100]); }
+        if (s.kind === 'work') { sig.workEnd(); sig.vibrate([100, 60, 100]); }
         next();
       }
     } else {

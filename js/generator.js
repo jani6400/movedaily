@@ -16,9 +16,9 @@ export const FOCI = {
 // Ablauf je Fokus: Phasen mit Anteil an der Übungsanzahl
 const PLANS = {
   mix: [
-    { cats: ['mobility'], share: 0.35 },
-    { cats: ['strength'], share: 0.4, main: true },
-    { cats: ['stretch', 'relax'], share: 0.25 },
+    { cats: ['mobility'], share: 0.3 },
+    { cats: ['strength'], share: 0.3 },
+    { cats: ['stretch'], share: 0.4, main: true },
   ],
   mobility: [
     { cats: ['mobility'], share: 0.85, main: true },
@@ -41,7 +41,8 @@ const PLANS = {
 };
 
 // Workout des Tages: Thema je Wochentag (So=0)
-const DAILY_THEME = ['relax', 'mobility', 'strength', 'stretch', 'strength', 'mobility', 'mix'];
+// Dehnen ist der Hauptfokus: 3× pro Woche, dazu Mobility, Kräftigung, Mix und Entspannung
+const DAILY_THEME = ['relax', 'stretch', 'strength', 'stretch', 'mobility', 'stretch', 'mix'];
 const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
 const SLOT = { 1: 20, 3: 35, 5: 45, 10: 50, 15: 55 };

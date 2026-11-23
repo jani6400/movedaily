@@ -38,9 +38,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   /* Figur */
-  --fig-near: #F4F7FB;
-  --fig-far: #5B7BA3;
-  /* Schrift */
+    /* Schrift */
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
@@ -362,6 +360,11 @@ body.playing .toast { bottom: calc(130px + var(--safe-b)); }
 }
 .switch:checked { background: var(--orange); }
 .switch:checked::after { transform: translateX(20px); }
+.select {
+  appearance: none; -webkit-appearance: none; max-width: 55%; min-height: 36px; padding: 0 28px 0 12px; border: 0; border-radius: 10px;
+  background: var(--bg-elev-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF851B' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 8px center / 14px;
+  color: var(--label); font: inherit; font-size: 0.9375rem; text-overflow: ellipsis;
+}
 .foot { text-align: center; padding: 0 12px; font-size: 0.8125rem; color: var(--label-3); }
 
 /* ---------- Tab-Leiste (schwebend, Glas) ---------- */
@@ -390,20 +393,31 @@ body::after {
 body.playing::after { display: none; }
 
 /* ============ Figur ============ */
-.figure .limb, .figure .trunk { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.figure .limb.near { stroke: var(--fig-near); stroke-width: 8; }
-.figure .limb.far { stroke: var(--fig-far); stroke-width: 7.5; }
-.figure .trunk { stroke: var(--fig-near); stroke-width: 11.5; }
-.figure .head { fill: var(--fig-near); }
-.figure .trunk-fill { fill: var(--fig-near); stroke: var(--fig-near); stroke-width: 7; stroke-linejoin: round; }
-.figure .ghost { opacity: 0.16; }
-.figure .ghost .far { stroke: var(--fig-near); }
+.figure {
+  --skin: #F4F7FB; --skin-far: #9FB2CB;
+  --shirt: #FF4136; --shirt-far: #B42C25;
+  --shorts: #3468A3; --shorts-far: #22497A;
+  --hair: #9A6440; --outline: #072646;
+}
+.figure .outline { fill: var(--outline); stroke: var(--outline); stroke-width: 1; stroke-linejoin: round; }
+.figure .skin { fill: var(--skin); }
+.figure .far .skin { fill: var(--skin-far); }
+.figure .shirt { fill: var(--shirt); }
+.figure .far .shirt { fill: var(--shirt-far); }
+.figure .torso .shirt { stroke: var(--shirt); stroke-width: 1.5; stroke-linejoin: round; }
+.figure .shorts { fill: var(--shorts); }
+.figure .far .shorts { fill: var(--shorts-far); }
+.figure .torso .shorts { stroke: var(--shorts); stroke-width: 1; stroke-linejoin: round; }
+.figure .torso .outline { stroke-width: 3; }
+.figure .hair { fill: var(--hair); }
+.figure .ghost { opacity: 0.14; }
+.figure .ghost .outline { display: none; }
 .figure .arrow { fill: none; stroke: var(--orange); stroke-width: 2.6; stroke-dasharray: 5 4; stroke-linecap: round; opacity: 0.95; }
 .figure .arrow-head { fill: var(--orange); }
 .figure .ground { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
-.figure .mat { fill: var(--red); opacity: 0.6; }
-.figure .mat-top { fill: rgba(255, 65, 54, 0.12); stroke: rgba(255, 65, 54, 0.4); stroke-width: 1.2; }
-.figure .wall { fill: var(--bg-elev-3); }
+.figure .mat { fill: var(--bg-elev-3); }
+.figure .mat-top { fill: rgba(36, 80, 127, 0.45); stroke: rgba(169, 188, 211, 0.25); stroke-width: 1.2; }
+.figure .wall { fill: #3A6390; }
 .figure .view-label { fill: var(--label-3); font-weight: 700; letter-spacing: 0.02em; }
 .figure .glow circle { animation: pulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes pulse { 0%, 100% { opacity: 0.45; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.1); } }
@@ -508,7 +522,8 @@ body.playing::after { display: none; }
   .tabbar, .action-bar, .p-controls { background: var(--bg-elev-2); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 @media (prefers-contrast: more) {
-  :root { --label-2: #D3DEEA; --label-3: #BCCADB; --sep: rgba(255, 255, 255, 0.35); --glass: var(--bg-elev-2); --fig-far: #8FAAD0; }
+  :root { --label-2: #D3DEEA; --label-3: #BCCADB; --sep: rgba(255, 255, 255, 0.35); --glass: var(--bg-elev-2); }
+  .figure { --skin-far: #C9D6E6; --outline: #000c1a; }
   .group-body, .card, .stat, .hero, .lib-card, .focus-card, .segmented { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
   .tabbar, .action-bar { backdrop-filter: none; -webkit-backdrop-filter: none; border-color: rgba(255, 255, 255, 0.4); }
 }

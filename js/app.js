@@ -5,7 +5,7 @@ import { createFigure } from './figure.js';
 import { store, dateKey } from './storage.js';
 import { generate, dailyWorkout, swapItem, singleWorkout, DURATIONS, FOCI } from './generator.js';
 import { startPlayer, estimateText } from './player.js';
-import { unlockAudio, speak, voiceAvailable } from './signals.js';
+import { unlockAudio, speak, voiceAvailable, germanVoices, genderOf, currentVoice, preview as previewSounds } from './signals.js';
 import { h, icon, toast, confirmDialog, sheet, CAT_ICON } from './ui.js';
 
 const app = document.getElementById('app');
@@ -385,6 +385,28 @@ function historyView() {
 }
 
 // ---------- Einstellungen ----------
+function voiceRow() {
+  const select = h('select', { class: 'select', 'aria-label': 'Stimme' });
+  const fill = () => {
+    const vs = germanVoices();
+    const auto = currentVoice();
+    const label = (v) => `${v.name.replace(/^Microsoft |\s*-\s*German.*$|\s*\(.*?\)/g, '')}${genderOf(v) === 'male' ? ' ♂' : genderOf(v) === 'female' ? ' ♀' : ''}`;
+    select.replaceChildren(
+      h('option', { value: '' }, `Automatisch${auto && !store.settings.voiceName ? ` (${label(auto)})` : ''}`),
+      ...vs.map((v) => h('option', { value: v.name, selected: v.name === store.settings.voiceName }, label(v))),
+    );
+    if (!vs.length) select.append(h('option', { disabled: true }, 'Keine deutsche Stimme gefunden'));
+  };
+  fill();
+  speechSynthesis.addEventListener?.('voiceschanged', fill);
+  select.addEventListener('change', () => {
+    store.setSetting('voiceName', select.value);
+    unlockAudio();
+    speak('Hallo! So klinge ich als deine Trainingsstimme.');
+  });
+  return h('label', { class: 'row' }, [h('div', { class: 'row-txt' }, [h('span', {}, 'Stimme'), h('span', { class: 'secondary small' }, '♂ = männlich')]), select]);
+}
+
 let installEvent = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; });
 
@@ -406,11 +428,13 @@ function settingsView() {
   view.append(
     largeTitle('Einstellungen'),
     group('Während des Workouts', [
-      toggle('sound', 'Töne', 'Pieptöne in den letzten 3 Sekunden'),
+      toggle('sound', 'Töne', 'Sanfte Klänge bei Start, Countdown und Ende'),
       toggle('vibrate', 'Vibration', 'Beim Übungswechsel (nur Android)'),
+      action('Töne anhören', () => previewSounds()),
       voiceAvailable() ? toggle('voice', 'Sprachansage', 'Sagt die nächste Übung an') : null,
-      voiceAvailable() ? action('Ansage testen', () => { unlockAudio(); speak('Als Nächstes: Glute Bridge. 15 Wiederholungen.'); }) : null,
-    ]),
+      voiceAvailable() ? voiceRow() : null,
+      voiceAvailable() ? action('Ansage testen', () => { unlockAudio(); speak('Als Nächstes: Taube. Vierzig Sekunden pro Seite. Atme ruhig in die Dehnung.'); }) : null,
+    ], 'Welche Stimmen es gibt, hängt vom Gerät ab. Auf dem iPhone klingen „Erweitert“- oder „Premium“-Stimmen am natürlichsten: Einstellungen › Bedienungshilfen › Gesprochene Inhalte › Stimmen › Deutsch, z. B. „Markus“ oder „Yannick“ laden.'),
     group('Workouts', [
       toggle('wall', 'Übungen mit Wand', 'z. B. Wall Sit oder Couch Stretch'),
       choice('rest', 'Vorbereitung zwischen Übungen', [5, 10, 15, 20], 's'),
@@ -431,7 +455,7 @@ function settingsView() {
         if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
       }, 'destructive'),
     ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
-    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.1'),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.2'),
   );
 }
 

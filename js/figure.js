@@ -78,11 +78,13 @@ export function fk(P) {
 }
 
 const BODY_KEYS = ['hipN', 'hipF', 'sc', 'soN', 'soF', 'spine', 'elN', 'wrN', 'elF', 'wrF', 'knN', 'anN', 'toN', 'knF', 'anF', 'toF'];
+// Dicke je Gelenk (für Bodenkontakt und Bildausschnitt)
+const PR = { hip: 6.5, hipN: 6.5, hipF: 6.5, sc: 6.5, soN: 5.5, soF: 5.5, spine: 6.5, elN: 4, elF: 4, wrN: 4.2, wrF: 4.2, knN: 5, knF: 5, anN: 3.6, anF: 3.6, toN: 2.4, toF: 2.4 };
 const STROKE = 4.5;
 
 function groundY(pts) {
   let m = pts.head[1] + LEN.head;
-  for (const k of BODY_KEYS) m = Math.max(m, pts[k][1] + STROKE);
+  for (const k of BODY_KEYS) m = Math.max(m, pts[k][1] + PR[k]);
   return m;
 }
 
@@ -119,8 +121,9 @@ function prepare(anim) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   const grow = (pts) => {
     for (const k of BODY_KEYS.concat(['hip'])) {
-      minX = Math.min(minX, pts[k][0] - STROKE); maxX = Math.max(maxX, pts[k][0] + STROKE);
-      minY = Math.min(minY, pts[k][1] - STROKE); maxY = Math.max(maxY, pts[k][1] + STROKE);
+      const r = (PR[k] || STROKE) + 1.5;
+      minX = Math.min(minX, pts[k][0] - r); maxX = Math.max(maxX, pts[k][0] + r);
+      minY = Math.min(minY, pts[k][1] - r); maxY = Math.max(maxY, pts[k][1] + r);
     }
     const h = pts.head;
     minX = Math.min(minX, h[0] - LEN.head); maxX = Math.max(maxX, h[0] + LEN.head);
@@ -163,34 +166,151 @@ function el(tag, attrs, parent) {
   return e;
 }
 
-// ---------- Figur zeichnen ----------
+// ---------- Figur zeichnen (detailliert) ----------
+// Jede Gliedmaße ist eine sich verjüngende Kapsel. Kleidung (Shirt, Shorts) und
+// eine Kontur in Hintergrundfarbe trennen überlappende Körperteile.
+const BODY_R = {
+  ua: [4.7, 3.7], fa: [3.5, 2.8], hand: 3.4,
+  th: [6.6, 4.6], sh: [4.6, 3.1], foot: [3.1, 2.0],
+  neck: 3.1, head: 8.6,
+};
+const TORSO_PROFILE = [[0, 6.6], [0.3, 5.7], [0.62, 7.0], [0.86, 7.5], [1, 6.4]]; // Halbbreite Hüfte → Schulter
+const OUT = 1.5; // Konturbreite
+
+const f1 = (n) => Math.round(n * 10) / 10;
+const lerpP = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+function circlePath(c, r) {
+  return `M${f1(c[0] - r)} ${f1(c[1])}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0Z`;
+}
+
+// Kapsel von a nach b mit Radius ra bzw. rb (verjüngt)
+function capsule(a, b, ra, rb) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const L = Math.hypot(dx, dy);
+  if (L < 0.6) return circlePath(a, Math.max(ra, rb));
+  const nx = -dy / L, ny = dx / L;
+  return `M${f1(a[0] + nx * ra)} ${f1(a[1] + ny * ra)}L${f1(b[0] + nx * rb)} ${f1(b[1] + ny * rb)}` +
+    `A${f1(rb)} ${f1(rb)} 0 0 0 ${f1(b[0] - nx * rb)} ${f1(b[1] - ny * rb)}` +
+    `L${f1(a[0] - nx * ra)} ${f1(a[1] - ny * ra)}A${f1(ra)} ${f1(ra)} 0 0 0 ${f1(a[0] + nx * ra)} ${f1(a[1] + ny * ra)}Z`;
+}
+
+function profileW(t) {
+  for (let i = 1; i < TORSO_PROFILE.length; i++) {
+    const [t1, w1] = TORSO_PROFILE[i], [t0, w0] = TORSO_PROFILE[i - 1];
+    if (t <= t1) return w0 + ((w1 - w0) * (t - t0)) / (t1 - t0);
+  }
+  return TORSO_PROFILE[TORSO_PROFILE.length - 1][1];
+}
+
+// Rumpf als Fläche entlang der (gebogenen) Wirbelsäule, Abschnitt t0..t1
+function torsoPath(p, t0, t1, grow = 0) {
+  const hw = Math.hypot(p.hipN[0] - p.hip[0], p.hipN[1] - p.hip[1]);
+  const sw = Math.hypot(p.soN[0] - p.sc[0], p.soN[1] - p.sc[1]);
+  const L = [], R = [];
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const t = t0 + ((t1 - t0) * i) / n;
+    const u = 1 - t;
+    const P = [u * u * p.hip[0] + 2 * u * t * p.ctrl[0] + t * t * p.sc[0], u * u * p.hip[1] + 2 * u * t * p.ctrl[1] + t * t * p.sc[1]];
+    let tx = 2 * u * (p.ctrl[0] - p.hip[0]) + 2 * t * (p.sc[0] - p.ctrl[0]);
+    let ty = 2 * u * (p.ctrl[1] - p.hip[1]) + 2 * t * (p.sc[1] - p.ctrl[1]);
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl; ty /= tl;
+    const w = profileW(t) + hw + (sw - hw) * t + grow;
+    L.push([P[0] - ty * w, P[1] + tx * w]);
+    R.push([P[0] + ty * w, P[1] - tx * w]);
+  }
+  const fmtq = (q) => `${f1(q[0])} ${f1(q[1])}`;
+  return 'M' + L.map(fmtq).join('L') + 'L' + R.reverse().map(fmtq).join('L') + 'Z';
+}
+
+function armGeo(p, s, g = 0) {
+  const so = p['so' + s], elb = p['el' + s], wr = p['wr' + s];
+  const r = BODY_R;
+  const fd = Math.hypot(wr[0] - elb[0], wr[1] - elb[1]) || 1;
+  const hand = [wr[0] + ((wr[0] - elb[0]) / fd) * 1.6, wr[1] + ((wr[1] - elb[1]) / fd) * 1.6];
+  return {
+    skin: capsule(so, elb, r.ua[0] + g, r.ua[1] + g) + capsule(elb, wr, r.fa[0] + g, r.fa[1] + g) + circlePath(hand, r.hand + g),
+    cloth: capsule(so, lerpP(so, elb, 0.42), r.ua[0] + 0.9 + g, r.ua[0] + 0.5 + g),
+  };
+}
+
+function legGeo(p, s, g = 0) {
+  const hip = p['hip' + s], kn = p['kn' + s], an = p['an' + s], to = p['to' + s];
+  const r = BODY_R;
+  const fl = Math.hypot(to[0] - an[0], to[1] - an[1]);
+  let foot;
+  if (fl > 1) {
+    const ux = (to[0] - an[0]) / fl, uy = (to[1] - an[1]) / fl;
+    foot = capsule([an[0] - ux * 2.2, an[1] - uy * 2.2], to, r.foot[0] + g, r.foot[1] + g);
+  } else foot = circlePath(an, r.foot[0] + g);
+  return {
+    skin: capsule(hip, kn, r.th[0] + g, r.th[1] + g) + capsule(kn, an, r.sh[0] + g, r.sh[1] + g) + foot,
+    cloth: capsule(hip, lerpP(hip, kn, 0.34), r.th[0] + 0.5 + g, r.th[0] + 0.2 + g),
+  };
+}
+
+function headGeo(p, st, g = 0) {
+  const nd = Math.hypot(p.head[0] - p.sc[0], p.head[1] - p.sc[1]) || 1;
+  const ux = (p.head[0] - p.sc[0]) / nd, uy = (p.head[1] - p.sc[1]) / nd;
+  // Blickrichtung: Halsrichtung um 90° gedreht (gespiegelt bei Seite 2)
+  const fx = st.mirrored ? uy : -uy, fy = st.mirrored ? -ux : ux;
+  const R = BODY_R.head;
+  let skin = capsule(p.sc, p.head, BODY_R.neck + g, BODY_R.neck + g) + circlePath(p.head, R + g);
+  if (st.nose) skin += circlePath([p.head[0] + fx * (R - 0.4), p.head[1] + fy * (R - 0.4)], 2 + g);
+  let hair = '';
+  if (st.hair === 'back') hair = circlePath([p.head[0] - fx * 1.6 + ux * 0.9, p.head[1] - fy * 1.6 + uy * 0.9], R + 0.6 + g);
+  else if (st.hair === 'top') hair = circlePath([p.head[0] + ux * 1.7, p.head[1] + uy * 1.7], R + 0.3 + g);
+  return { skin, hair };
+}
+
+function figStyle(anim) {
+  const side = !anim.label && anim.view !== 'top';
+  return {
+    order: anim.order,
+    nose: side,
+    hair: anim.view === 'top' ? null : side ? 'back' : 'top',
+    mirrored: !!anim.mirrored,
+  };
+}
+
 // order 'front': beide Beine vor dem Rumpf (Front-/Rückansicht)
 function buildBody(g, order) {
+  const part = (cls, cloth) => {
+    const grp = el('g', { class: 'part ' + cls }, g);
+    return { out: el('path', { class: 'outline' }, grp), skin: el('path', { class: 'skin' }, grp), cloth: el('path', { class: cloth }, grp) };
+  };
   const b = {};
-  const mk = (key, cls) => { b[key] = el('path', { class: cls }, g); };
-  mk('farArm', 'limb far');
-  if (order !== 'front') mk('farLeg', 'limb far');
-  mk('trunkFill', 'trunk-fill');
-  mk('torso', 'trunk');
-  mk('neck', 'limb near');
-  b.head = el('circle', { class: 'head', r: LEN.head }, g);
-  if (order === 'front') mk('farLeg', 'limb far');
-  mk('nearLeg', 'limb near');
-  mk('nearArm', 'limb near');
+  b.farArm = part('far', 'shirt');
+  if (order !== 'front') b.farLeg = part('far', 'shorts');
+  const tg = el('g', { class: 'part torso' }, g);
+  b.torso = { out: el('path', { class: 'outline' }, tg), shirt: el('path', { class: 'shirt' }, tg), shorts: el('path', { class: 'shorts' }, tg) };
+  const hg = el('g', { class: 'part head' }, g);
+  b.head = { out: el('path', { class: 'outline' }, hg), hair: el('path', { class: 'hair' }, hg), skin: el('path', { class: 'skin' }, hg) };
+  if (order === 'front') b.farLeg = part('far', 'shorts');
+  b.nearLeg = part('near', 'shorts');
+  b.nearArm = part('near', 'shirt');
   return b;
 }
 
-function drawBody(b, p) {
-  b.farArm.setAttribute('d', `M${pt(p.soF)}L${pt(p.elF)}L${pt(p.wrF)}`);
-  b.farLeg.setAttribute('d', `M${pt(p.hipF)}L${pt(p.knF)}L${pt(p.anF)}L${pt(p.toF)}`);
-  const wide = Math.hypot(p.hipN[0] - p.hipF[0], p.hipN[1] - p.hipF[1]) + Math.hypot(p.soN[0] - p.soF[0], p.soN[1] - p.soF[1]) > 4;
-  b.trunkFill.setAttribute('d', wide ? `M${pt(p.hipF)}L${pt(p.hipN)}L${pt(p.soN)}L${pt(p.soF)}Z` : '');
-  b.torso.setAttribute('d', `M${pt(p.hip)}Q${pt(p.ctrl)} ${pt(p.sc)}`);
-  b.neck.setAttribute('d', `M${pt(p.sc)}L${pt(p.head)}`);
-  b.head.setAttribute('cx', fmt(p.head[0]));
-  b.head.setAttribute('cy', fmt(p.head[1]));
-  b.nearLeg.setAttribute('d', `M${pt(p.hipN)}L${pt(p.knN)}L${pt(p.anN)}L${pt(p.toN)}`);
-  b.nearArm.setAttribute('d', `M${pt(p.soN)}L${pt(p.elN)}L${pt(p.wrN)}`);
+function drawBody(b, p, st) {
+  const setPart = (part, geo, outGeo) => {
+    part.out.setAttribute('d', outGeo.skin + outGeo.cloth);
+    part.skin.setAttribute('d', geo.skin);
+    part.cloth.setAttribute('d', geo.cloth);
+  };
+  setPart(b.farArm, armGeo(p, 'F'), armGeo(p, 'F', OUT));
+  setPart(b.farLeg, legGeo(p, 'F'), legGeo(p, 'F', OUT));
+  b.torso.out.setAttribute('d', torsoPath(p, 0, 1, OUT));
+  b.torso.shirt.setAttribute('d', torsoPath(p, 0.2, 1));
+  b.torso.shorts.setAttribute('d', torsoPath(p, 0, 0.22, 0.3));
+  const hg = headGeo(p, st), ho = headGeo(p, st, OUT);
+  b.head.out.setAttribute('d', ho.skin + ho.hair);
+  b.head.hair.setAttribute('d', hg.hair);
+  b.head.skin.setAttribute('d', hg.skin);
+  setPart(b.nearLeg, legGeo(p, 'N'), legGeo(p, 'N', OUT));
+  setPart(b.nearArm, armGeo(p, 'N'), armGeo(p, 'N', OUT));
 }
 
 function arrowPaths(anim, prep) {
@@ -254,7 +374,7 @@ export function createFigure(anim, opts = {}) {
 
   if (ghost && prep.frames.length > 1) {
     const gg = el('g', { class: 'ghost' }, svg);
-    drawBody(buildBody(gg, anim.order), place(prep.frames[anim.ghostFrame ?? 0], anim));
+    drawBody(buildBody(gg, anim.order), place(prep.frames[anim.ghostFrame ?? 0], anim), figStyle(anim));
   }
 
   if (arrows) {
@@ -269,10 +389,11 @@ export function createFigure(anim, opts = {}) {
 
   const gb = el('g', { class: 'body' }, svg);
   const body = buildBody(gb, anim.order);
+  const st = figStyle(anim);
 
   const render = (P) => {
     const p = place(P, anim);
-    drawBody(body, p);
+    drawBody(body, p, st);
     for (const g of glows) {
       g.c.setAttribute('cx', fmt(p[g.k][0]));
       g.c.setAttribute('cy', fmt(p[g.k][1]));

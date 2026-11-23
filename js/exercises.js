@@ -323,6 +323,98 @@ export const EXERCISES = [
     anim: { label: 'von vorn', order: 'front', frames: [STRADDLE, P(STRADDLE, { torso: 148, neck: 140, uaF: 125, faF: 105, uaN: 40, faN: 60 })], anchor: 'hip', arrows: ['wrF'], focus: ['spine'], dur: 1800, holds: [500, 2000] },
   },
 
+  // ---------- weitere Dehnübungen ----------
+  {
+    id: 'lizard', name: 'Eidechse', cats: ['stretch', 'mobility'], areas: ['hip', 'legs'], type: 'time', dur: 40, perSide: true,
+    steps: ['Tiefer Ausfallschritt, hinteres Knie auf der Matte.', 'Beide Hände innen neben den vorderen Fuß setzen.', 'Wenn es geht, auf die Unterarme sinken und die Hüfte tief lassen.'],
+    tip: 'Das vordere Knie darf leicht nach außen fallen – das öffnet die Hüfte zusätzlich.',
+    anim: { frames: [LUNGE_LOW, P(LUNGE_LOW, { torso: 82, neck: 88, uaN: 0, faN: 90, uaF: 2, faF: 92 })], anchor: 'anN', arrows: ['sc'], focus: ['hipF'], dur: 1800, holds: [500, 2500] },
+  },
+  {
+    id: 'half-splits', name: 'Halber Spagat', cats: ['stretch'], areas: ['legs', 'knee'], type: 'time', dur: 40, perSide: true,
+    steps: ['Aus dem Kniestand ein Bein nach vorn strecken, Ferse am Boden, Zehen zeigen nach oben.', 'Hüfte über das hintere Knie zurückschieben.', 'Mit langem Rücken nach vorn beugen, Hände neben das Bein.'],
+    tip: 'Rücken lang statt rund – die Dehnung soll hinten im Oberschenkel sein, nicht im Rücken.',
+    anim: { frames: [P(KNEEL, { thN: 59, shN: 59, ftN: 160, thF: 0, uaN: 40, faN: 20, uaF: 38, faF: 18 }), P(KNEEL, { torso: 112, neck: 110, thN: 59, shN: 59, ftN: 160, thF: 0, uaN: 75, faN: 60, uaF: 73, faF: 58 })], anchor: 'knF', arrows: ['head'], focus: ['knN'], dur: 2000, holds: [500, 2500] },
+  },
+  {
+    id: 'kneeling-adductor', name: 'Adduktoren-Dehnung kniend', cats: ['stretch', 'mobility'], areas: ['hip', 'legs'], type: 'time', dur: 40, perSide: true,
+    steps: ['Kniestand, ein Bein gestreckt zur Seite ausstellen, Fuß flach.', 'Hände auf die Oberschenkel oder vor dir abstützen.', 'Hüfte langsam Richtung Boden und leicht nach hinten sinken lassen.'],
+    tip: 'Die Dehnung sitzt innen am gestreckten Bein – Knie zeigt nach oben.',
+    anim: { label: 'von vorn', order: 'front', frames: [P(FRONT, { torso: 180, neck: 180, thN: 59, shN: 59, ftN: [20, 0.35], thF: 0, shF: [0, 0.12], ftF: [0, 0.1], uaN: 25, faN: 40, uaF: -12, faF: -6 }), P(FRONT, { torso: 172, neck: 175, thN: 66, shN: 66, ftN: [20, 0.35], thF: -6, shF: [0, 0.12], ftF: [0, 0.1], uaN: 35, faN: 55, uaF: -6, faF: 6 })], anchor: 'knF', arrows: ['sc'], focus: ['hipN'], dur: 1800, holds: [500, 2000] },
+  },
+  {
+    id: 'gate-pose', name: 'Seitdehnung im Kniestand', cats: ['stretch'], areas: ['back', 'hip'], type: 'time', dur: 30, perSide: true,
+    steps: ['Kniestand, ein Bein gestreckt zur Seite ausstellen.', 'Arme seitlich ausbreiten.', 'Zum gestreckten Bein neigen, der obere Arm zieht im Bogen über den Kopf.'],
+    tip: 'Brust bleibt offen nach vorn – stell dir vor, du stehst zwischen zwei Glasscheiben.',
+    anim: { label: 'von vorn', order: 'front', frames: [P(FRONT, { torso: 180, neck: 180, thN: 59, shN: 59, ftN: [20, 0.35], thF: 0, shF: [0, 0.12], ftF: [0, 0.1], uaN: 90, faN: 90, uaF: -90, faF: -90 }), P(FRONT, { torso: 150, neck: 140, thN: 59, shN: 59, ftN: [20, 0.35], thF: 0, shF: [0, 0.12], ftF: [0, 0.1], uaN: 30, faN: 20, uaF: 150, faF: 115 })], anchor: 'knF', arrows: ['wrF'], focus: ['spine'], dur: 2000, holds: [500, 2200] },
+  },
+  {
+    id: 'reclined-butterfly', name: 'Liegender Schmetterling', cats: ['stretch', 'relax'], areas: ['hip'], type: 'time', dur: 60, breath: 'calm',
+    steps: ['Rückenlage, Fußsohlen aneinander, Knie fallen nach außen (Ansicht von oben).', 'Arme locker neben dem Körper, Handflächen nach oben.', 'Schwer werden lassen und ruhig in den Bauch atmen.'],
+    tip: 'Kissen unter die Knie, wenn die Dehnung zu stark ist.',
+    anim: { view: 'top', label: 'von oben', frames: [{ torso: -90, neck: -90, shOff: [0, 12], hipOff: [0, 7], uaN: 75, faN: 85, uaF: 105, faF: 95, thN: 55, shN: 150, ftN: [90, 0.4], thF: 125, shF: 30, ftF: [90, 0.4] }, { torso: -90, neck: -90, curve: 1, shOff: [0, 12], hipOff: [0, 7], uaN: 75, faN: 85, uaF: 105, faF: 95, thN: 38, shN: 152, ftN: [90, 0.4], thF: 142, shF: 28, ftF: [90, 0.4] }], arrows: ['knN', 'knF'], focus: ['hipN', 'hipF'], dur: 3000, hold: 800 },
+  },
+  {
+    id: 'straddle-fold', name: 'Grätsche mit Vorbeuge', cats: ['stretch'], areas: ['hip', 'legs', 'back'], type: 'time', dur: 40,
+    steps: ['Grätschsitz, Beine so weit wie angenehm geöffnet, Zehen zeigen nach oben.', 'Aufrichten und die Hände vor dir aufsetzen.', 'Mit langem Rücken langsam nach vorn wandern.'],
+    tip: 'Kissen unter den Po kippt das Becken nach vorn und macht es leichter.',
+    anim: { label: 'von vorn', order: 'front', frames: [STRADDLE, P(STRADDLE, { torso: [180, 0.55], neck: [180, 0.6], uaN: [12, 0.75], faN: [6, 0.75], uaF: [-12, 0.75], faF: [-6, 0.75] })], anchor: 'hip', arrows: ['head'], focus: ['hipN', 'hipF'], dur: 2200, holds: [600, 2500] },
+  },
+  {
+    id: 'banana', name: 'Bananen-Seitdehnung', cats: ['stretch', 'relax'], areas: ['back', 'hip'], type: 'time', dur: 40, perSide: true,
+    steps: ['Rückenlage, Arme lang über den Kopf (Ansicht von oben).', 'Oberkörper und Beine zur selben Seite wandern lassen – der Körper wird zur Banane.', 'Gesäß bleibt am Boden, ruhig in die gedehnte Flanke atmen.'],
+    tip: 'Den Knöchel überkreuzen verstärkt die Dehnung an der Außenseite.',
+    anim: { view: 'top', label: 'von oben', frames: [{ torso: -90, neck: -90, shOff: [0, 11], hipOff: [0, 6], uaN: -100, faN: -95, uaF: -80, faF: -85, thN: 92, shN: 92, ftN: [90, 0.35], thF: 88, shF: 88, ftF: [90, 0.35] }, { torso: -78, neck: -70, curve: -9, shOff: [0, 11], hipOff: [0, 6], uaN: -60, faN: -50, uaF: -45, faF: -35, thN: 62, shN: 58, ftN: [60, 0.35], thF: 58, shF: 54, ftF: [55, 0.35] }], arrows: ['wrF', 'anN'], focus: ['spine'], dur: 2000, holds: [500, 2500] },
+  },
+  {
+    id: 'head-to-knee', name: 'Einbeinige Vorbeuge', cats: ['stretch'], areas: ['legs', 'back'], type: 'time', dur: 40, perSide: true,
+    steps: ['Sitzen, ein Bein lang, die andere Fußsohle innen an den Oberschenkel.', 'Arme nach oben strecken, Rücken lang machen.', 'Über das gestreckte Bein nach vorn beugen, Hände Richtung Fuß.'],
+    tip: 'Erst lang, dann tief: Bewegung aus der Hüfte, nicht aus dem Rücken.',
+    anim: { frames: [P(SIT, { torso: 176, neck: 178, uaN: 172, faN: 176, uaF: 170, faF: 174, thF: [85, 0.45], shF: [-100, 0.45], ftF: [0, 0.3] }), P(SIT, { torso: 118, neck: 110, curve: -3, uaN: 98, faN: 95, uaF: 96, faF: 93, thF: [85, 0.45], shF: [-100, 0.45], ftF: [0, 0.3] })], anchor: 'hip', arrows: ['wrN'], focus: ['knN'], dur: 2200, holds: [600, 2500] },
+  },
+  {
+    id: 'chest-opener', name: 'Brustöffner im Kniestand', cats: ['stretch', 'mobility'], areas: ['back'], type: 'time', dur: 30,
+    steps: ['Aufrechter Kniestand, Hände hinter dem Rücken verschränken.', 'Schulterblätter zusammenziehen, Brustbein nach vorn-oben schieben.', 'Arme gestreckt leicht vom Rücken abheben.'],
+    tip: 'Gegenmittel zum Sitzen am Schreibtisch – Kinn bleibt lang, kein Hohlkreuz.',
+    anim: { frames: [P(KNEEL, { uaN: -15, faN: 5, uaF: -17, faF: 3 }), P(KNEEL, { torso: 186, neck: 190, uaN: -45, faN: -52, uaF: -47, faF: -54 })], anchor: 'knN', arrows: ['wrN'], focus: ['sc'], dur: 1800, holds: [500, 2200] },
+  },
+  {
+    id: 'neck-stretch', name: 'Nacken-Seitdehnung', cats: ['stretch', 'relax'], areas: ['back'], type: 'time', dur: 30, perSide: true,
+    steps: ['Aufrecht im Schneidersitz sitzen.', 'Kopf zur Seite neigen, die Hand legt sich sanft über den Kopf.', 'Die andere Schulter aktiv nach unten schieben.'],
+    tip: 'Nicht am Kopf ziehen – das Gewicht der Hand reicht völlig.',
+    anim: { label: 'von vorn', order: 'front', frames: [P(FRONT, { torso: 180, neck: 180, thN: [100, 0.85], shN: [-105, 0.6], ftN: [0, 0.3], thF: [-100, 0.85], shF: [105, 0.6], ftF: [0, 0.3], uaN: 20, faN: 55, uaF: -20, faF: -55 }), P(FRONT, { torso: 180, neck: 150, thN: [100, 0.85], shN: [-105, 0.6], ftN: [0, 0.3], thF: [-100, 0.85], shF: [105, 0.6], ftF: [0, 0.3], uaN: 165, faN: -105, uaF: -18, faF: -8 })], anchor: 'hip', arrows: ['head'], focus: ['sc'], dur: 1800, holds: [500, 2500] },
+  },
+  {
+    id: 'seated-twist', name: 'Drehsitz im Sitzen', cats: ['stretch', 'mobility'], areas: ['back', 'hip'], type: 'time', dur: 30, perSide: true,
+    steps: ['Aufrecht im Schneidersitz sitzen.', 'Eine Hand an das gegenüberliegende Knie, die andere hinter dir abstützen.', 'Mit jedem Ausatmen etwas weiter aufdrehen, Blick über die Schulter.'],
+    tip: 'Erst lang machen, dann drehen – so entsteht Platz zwischen den Wirbeln.',
+    anim: { label: 'von vorn', order: 'front', frames: [P(FRONT, { torso: 180, neck: 180, thN: [100, 0.85], shN: [-105, 0.6], ftN: [0, 0.3], thF: [-100, 0.85], shF: [105, 0.6], ftF: [0, 0.3], uaN: 20, faN: 55, uaF: -20, faF: -55 }), P(FRONT, { torso: 182, neck: 188, shOff: [5, 0], thN: [100, 0.85], shN: [-105, 0.6], ftN: [0, 0.3], thF: [-100, 0.85], shF: [105, 0.6], ftF: [0, 0.3], uaN: -25, faN: -60, uaF: [10, 0.6], faF: [0, 0.5] })], anchor: 'hip', arrows: ['wrN'], focus: ['spine'], dur: 1800, holds: [500, 2500] },
+  },
+  {
+    id: 'toe-squat', name: 'Zehensitz', cats: ['stretch'], areas: ['knee', 'legs'], type: 'time', dur: 30,
+    steps: ['Kniestand, Zehen aufstellen.', 'Langsam das Gesäß auf die Fersen sinken lassen.', 'Aufrecht sitzen und atmen – die Dehnung sitzt in den Fußsohlen.'],
+    tip: 'Intensiv! Bei Bedarf Hände vor dir abstützen und mit wenig Gewicht beginnen.',
+    anim: { frames: [P(KNEEL, { shN: -80, ftN: [5, 0.9], shF: -80, ftF: [5, 0.9] }), P(HEELS, { shN: -80, ftN: [5, 0.9], shF: -80, ftF: [5, 0.9] })], anchor: 'knN', arrows: ['hip'], focus: ['toN'], dur: 1800, holds: [400, 2500] },
+  },
+  {
+    id: 'kneeling-quad', name: 'Oberschenkel-Dehnung kniend', cats: ['stretch'], areas: ['legs', 'hip', 'knee'], type: 'time', dur: 30, perSide: true,
+    steps: ['Halbkniestand, das hintere Knie auf der Matte.', 'Hinteren Fuß mit der Hand greifen und Richtung Po ziehen.', 'Po anspannen, Hüfte leicht nach vorn schieben.'],
+    tip: 'Eine Hand am vorderen Knie oder an der Wand hilft beim Gleichgewicht.',
+    anim: { frames: [P(KNEEL, { thF: 90, shF: 0, ftF: 90, thN: -8, shN: -90, uaN: 0, faN: 5, uaF: 40, faF: 70 }), P(KNEEL, { thF: 92, shF: -4, ftF: 90, thN: -14, shN: 172, ftN: [-110, 0.8], uaN: -10, faN: -2, uaF: 40, faF: 70 })], anchor: 'anF', arrows: ['anN'], focus: ['knN'], dur: 1800, holds: [500, 2500] },
+  },
+  {
+    id: 'ragdoll', name: 'Stehende Vorbeuge', cats: ['stretch', 'relax'], areas: ['back', 'legs'], type: 'time', dur: 40,
+    steps: ['Hüftbreiter Stand, Knie leicht gebeugt.', 'Oberkörper nach vorn hängen lassen, Ellbogen greifen.', 'Kopf locker, sanft von Seite zu Seite schwingen.'],
+    tip: 'Beim Aufrichten Wirbel für Wirbel aufrollen, der Kopf kommt zuletzt.',
+    anim: { frames: [STAND, P(STAND, { torso: 38, neck: 14, curve: -4, thN: 24, shN: -14, thF: 22, shF: -16, uaN: 4, faN: 0, uaF: 2, faF: -2 })], anchor: 'anN', arrows: ['head'], focus: ['spine'], dur: 2400, holds: [600, 2600] },
+  },
+  {
+    id: 'knee-hug-single', name: 'Ein Knie zur Brust', cats: ['stretch', 'relax'], areas: ['hip', 'back'], type: 'time', dur: 30, perSide: true,
+    steps: ['Rückenlage, beide Beine lang.', 'Ein Knie mit den Händen zur Brust ziehen.', 'Das andere Bein bleibt lang und schwer am Boden.'],
+    tip: 'Dehnt den Po des angezogenen Beins und den Hüftbeuger des langen Beins.',
+    anim: { frames: [SUPINE, P(SUPINE, { thN: -150, shN: 110, ftN: 195, uaN: 150, faN: 120, uaF: 148, faF: 118 })], anchor: 'hip', arrows: ['knN'], focus: ['hipN'], dur: 1800, holds: [500, 2500] },
+  },
+
   // ================= ENTSPANNUNG =================
   {
     id: 'child-pose', name: 'Kindhaltung', cats: ['relax', 'stretch'], areas: ['back', 'hip'], type: 'time', dur: 45, breath: 'calm',

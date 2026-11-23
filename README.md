@@ -11,7 +11,7 @@ Läuft als installierbare Web-App (PWA) auf dem Handy, offline, ohne Anmeldung. 
 4. **Zeit- oder Wiederholungs-Übungen** – inkl. automatischem Seitenwechsel bei einseitigen Übungen
 5. **Animierte Figuren** – jede Übung als animierte Strichfigur mit Bewegungspfeilen und Anleitung
 6. **Favoriten ❤️ & Ausblenden 🚫** – Favoriten kommen öfter dran, ausgeblendete nie wieder
-7. **Übungsbibliothek** – 51 Übungen, filterbar nach Kategorie, Körperbereich, Favoriten
+7. **Übungsbibliothek** – 66 Übungen (Schwerpunkt Dehnen), filterbar nach Kategorie, Körperbereich, Favoriten
 8. **Tägliche Routine** – Workout des Tages (Thema je Wochentag), Serie 🔥 und Kalender
 9. **Signale** – Countdown-Töne, Vibration, Display bleibt an
 10. **Offline & installierbar** – PWA mit App-Icon
