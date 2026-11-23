@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Figuren-Galerie (Entwicklung)</title>
+  <link rel="stylesheet" href="../css/app.css">
+  <style>
+    body { padding: 12px; }
+    .g { display: grid; grid-template-columns: repeat(var(--cols, 2), 1fr); gap: 8px; }
+    .c { background: rgba(0,0,0,.25); border-radius: 10px; padding: 4px; font-size: 11px; }
+    .c .row2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; }
+    .c svg { width: 100%; display: block; aspect-ratio: 1.35; }
+  </style>
+</head>
+<body>
+  <p>Entwicklungs-Werkzeug: alle Übungen mit Keyframes (Start, Ende, animiert). <a href="?only=">alle</a></p>
+  <div class="g" id="g"></div>
+  <script type="module">
+    import { EXERCISES } from '../js/exercises.js';
+    import { createFigure } from '../js/figure.js';
+    const only = new URLSearchParams(location.search).get('only');
+    const g = document.getElementById('g');
+    g.style.setProperty('--cols', new URLSearchParams(location.search).get('cols') || 2);
+    EXERCISES.filter((e) => !only || only.split(',').includes(e.id)).forEach((e, i) => {
+      const c = document.createElement('div');
+      c.className = 'c';
+      c.innerHTML = `<b>${i + 1}. ${e.name}</b> <small>${e.id}</small>`;
+      const r = document.createElement('div');
+      r.className = 'row2';
+      const last = e.anim.frames.length - 1;
+      r.append(createFigure(e.anim, { animate: false, frame: 0, ghost: false, arrows: false }).svg);
+      r.append(createFigure(e.anim, { animate: false, frame: last > 0 ? (e.anim.thumb ?? 1) : 0 }).svg);
+      r.append(createFigure(e.anim, { animate: true }).svg);
+      c.append(r);
+      g.append(c);
+    });
+  </script>
+</body>
+</html>
