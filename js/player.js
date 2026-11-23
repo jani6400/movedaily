@@ -1,7 +1,8 @@
 // Workout-Player: Timer, Ablaufsteuerung, Ansagen.
 
 import { BY_ID, CATS } from './exercises.js';
-import { createFigure, mirror, MUSCLES } from './figure.js';
+import { mirror, MUSCLES } from './figure.js';
+import { createFigure } from './figure3d.js';
 import { store } from './storage.js';
 import { workoutSeconds } from './generator.js';
 import * as sig from './signals.js';
@@ -130,7 +131,7 @@ export function startPlayer(workout, { onExit }) {
       figKey = key;
       fig?.stop();
       figBox.replaceChildren();
-      fig = createFigure(animFor(e, key.endsWith(':2') ? 2 : 1), { aspect: 1.45 });
+      fig = createFigure(animFor(e, key.endsWith(':2') ? 2 : 1), { aspect: 1.45, interactive: true });
       figBox.append(fig.svg);
       if (pausedAt !== null) fig.stop();
     }

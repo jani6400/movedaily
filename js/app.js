@@ -1,12 +1,15 @@
 // App-Shell: Navigation und Ansichten (Heute, Vorschau, Bibliothek, Verlauf, Einstellungen).
 
 import { EXERCISES, BY_ID, CATS, AREAS, formatAmount } from './exercises.js';
-import { createFigure, MUSCLES, JOINTS } from './figure.js';
+import { MUSCLES, JOINTS } from './figure.js';
+import { createFigure, setFigureGender } from './figure3d.js';
 import { store, dateKey } from './storage.js';
 import { generate, dailyWorkout, swapItem, singleWorkout, DURATIONS, FOCI } from './generator.js';
 import { startPlayer, estimateText } from './player.js';
 import { unlockAudio, speak, voiceAvailable, germanVoices, genderOf, currentVoice, preview as previewSounds } from './signals.js';
 import { h, icon, toast, confirmDialog, sheet, CAT_ICON } from './ui.js';
+
+setFigureGender(store.settings.figure);
 
 const app = document.getElementById('app');
 const view = h('main', { class: 'view' });
@@ -269,7 +272,7 @@ function openDetail(e) {
   paint();
 
   const figBox = h('div', { class: 'detail-stage' });
-  figBox.append(createFigure(e.anim, { aspect: 1.4, animate: !reduceMotion.matches }).svg);
+  figBox.append(createFigure(e.anim, { aspect: 1.4, animate: !reduceMotion.matches, interactive: true }).svg);
   const s = sheet(h('div', { class: 'detail' }, [
     figBox,
     h('h2', { class: 'detail-title' }, e.name),
@@ -440,9 +443,19 @@ function settingsView() {
 
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const previewBox = h('div', { class: 'stage fig-preview' });
+  const figPreview = () => previewBox.replaceChildren(createFigure(BY_ID['worlds-greatest'].anim, { aspect: 1.9, arrows: false, animate: !reduceMotion.matches }).svg);
+  figPreview();
 
   view.append(
     largeTitle('Einstellungen'),
+    group('Darstellung', [
+      h('div', { class: 'row col' }, [
+        h('span', {}, 'Figur in den Übungen'),
+        segmented(['m', 'f'], s.figure, 'Figur', (v) => { store.setSetting('figure', v); setFigureGender(v); figPreview(); }, (v) => (v === 'm' ? 'Männlich' : 'Weiblich')),
+        previewBox,
+      ]),
+    ]),
     group('Während des Workouts', [
       toggle('sound', 'Töne', 'Sanfte Klänge bei Start, Countdown und Ende'),
       toggle('vibrate', 'Vibration', 'Beim Übungswechsel (nur Android)'),
@@ -471,7 +484,7 @@ function settingsView() {
         if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
       }, 'destructive'),
     ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
-    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.3'),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 2.0'),
   );
 }
 

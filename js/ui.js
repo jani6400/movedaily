@@ -107,7 +107,7 @@ export function sheet(content, { onClose } = {}) {
   // Wischen nach unten schließt das Sheet (nur wenn ganz oben gescrollt)
   let startY = null, dy = 0, t0 = 0;
   panel.addEventListener('touchstart', (e) => {
-    if (panel.scrollTop > 0) return;
+    if (panel.scrollTop > 0 || e.target.closest('.fig3d.interactive')) return; // Figur drehen ≠ Sheet schließen
     startY = e.touches[0].clientY; dy = 0; t0 = Date.now();
     panel.style.transition = 'none';
   }, { passive: true });

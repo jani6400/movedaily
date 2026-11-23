@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline nutzbar.
 // Bei jeder Änderung an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'movedaily-v4';
+const VERSION = 'movedaily-v6';
 
 const FILES = [
   './',
@@ -10,6 +10,7 @@ const FILES = [
   './js/app.js',
   './js/exercises.js',
   './js/figure.js',
+  './js/figure3d.js',
   './js/generator.js',
   './js/player.js',
   './js/signals.js',
@@ -39,7 +40,7 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

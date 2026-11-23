@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   lastMinutes: 5,
   lastFocus: 'stretch',
   voiceName: '', // leer = automatisch die beste (männliche) Stimme
+  figure: 'm', // Figur: 'm' = männlich, 'f' = weiblich
 };
 
 function fresh() {

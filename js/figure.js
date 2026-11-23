@@ -89,7 +89,7 @@ function groundY(pts) {
 }
 
 // Figur in die Szene setzen: Boden bei y=0, Anker-Gelenk bei x=0
-function place(P, anim) {
+export function place(P, anim) {
   const pts = fk(P);
   const a = pts[anim.anchor || 'hip'];
   const dx = -a[0];
@@ -98,12 +98,12 @@ function place(P, anim) {
   return pts;
 }
 
-const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+export const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 // ---------- Vorbereitung einer Animation ----------
 const prepCache = new WeakMap();
 
-function prepare(anim) {
+export function prepare(anim) {
   if (prepCache.has(anim)) return prepCache.get(anim);
   const frames = anim.frames.map(normalizePose);
   const n = frames.length;
@@ -170,16 +170,35 @@ function el(tag, attrs, parent) {
 // Stil: weiße Körperflächen mit dunkler Kontur, schwarze Haare und Shorts.
 // Beanspruchte Muskeln werden als Flächen auf dem Körper hervorgehoben
 // (rot = Hauptziel, orange = mitbeteiligt), Gelenke als Ring.
-const BODY_R = {
-  ua: [4.5, 3.6], fa: [3.4, 2.7], hand: 3.3,
-  th: [6.5, 4.5], sh: [4.5, 3.0], foot: [3.0, 1.9],
-  neck: 3.0, head: 8.6,
+// Körperbau je Figur (männlich / weiblich)
+const BUILDS = {
+  m: {
+    r: { ua: [4.9, 3.7], fa: [3.7, 2.8], hand: 3.3, th: [6.6, 4.6], sh: [4.6, 3.0], foot: [3.0, 1.9], neck: 3.3, head: 8.6 },
+    torso: [[0, 6.3], [0.3, 5.8], [0.62, 7.3], [0.86, 8.0], [1, 6.9]],
+  },
+  f: {
+    r: { ua: [4.1, 3.2], fa: [3.2, 2.5], hand: 3.0, th: [6.9, 4.4], sh: [4.4, 2.8], foot: [2.8, 1.8], neck: 2.7, head: 8.3 },
+    torso: [[0, 7.4], [0.3, 5.3], [0.62, 6.6], [0.86, 6.8], [1, 5.9]],
+  },
 };
-const TORSO_PROFILE = [[0, 6.6], [0.3, 5.6], [0.62, 6.9], [0.86, 7.4], [1, 6.3]]; // Halbbreite Hüfte → Schulter
+let GENDER = 'm';
+const BODY_R = { ...BUILDS.m.r };
+let TORSO_PROFILE = BUILDS.m.torso; // Halbbreite Hüfte → Schulter
+
+export function setFigureGender(g) {
+  GENDER = g === 'f' ? 'f' : 'm';
+  Object.assign(BODY_R, BUILDS[GENDER].r);
+  TORSO_PROFILE = BUILDS[GENDER].torso;
+}
 
 const f1 = (n) => Math.round(n * 10) / 10;
 const lerpP = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-const poly = (pts) => 'M' + pts.map((q) => `${f1(q[0])} ${f1(q[1])}`).join('L') + 'Z';
+const fq = (q) => `${f1(q[0])} ${f1(q[1])}`;
+const poly = (pts) => 'M' + pts.map(fq).join('L') + 'Z';
+const polyline = (pts) => 'M' + pts.map(fq).join('L');
+const offs = (p, v, k) => [p[0] + v[0] * k, p[1] + v[1] * k];
+const unitV = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1]; const L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
+const antOf = (d, sign) => [d[1] * sign, -d[0] * sign]; // Vorderseite einer Gliedmaße
 
 function circlePath(c, r) {
   return `M${f1(c[0] - r)} ${f1(c[1])}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0Z`;
@@ -296,47 +315,127 @@ function regionPaths(p, list, st, owner) {
   return d;
 }
 
-function armGeo(p, s) {
+// ---------- Körperteile mit Muskelformen, Gelenken, Händen und Füßen ----------
+function armGeo(p, s, st) {
   const so = p['so' + s], elb = p['el' + s], wr = p['wr' + s];
   const r = BODY_R;
-  const fd = Math.hypot(wr[0] - elb[0], wr[1] - elb[1]) || 1;
-  const hand = [wr[0] + ((wr[0] - elb[0]) / fd) * 1.6, wr[1] + ((wr[1] - elb[1]) / fd) * 1.6];
-  return { skin: capsule(so, elb, r.ua[0], r.ua[1]) + capsule(elb, wr, r.fa[0], r.fa[1]) + circlePath(hand, r.hand), cloth: '' };
+  const sign = st.mirrored ? -1 : 1;
+  const dU = unitV(so, elb), dF = unitV(elb, wr);
+  const aU = antOf(dU, sign), aF = antOf(dF, sign);
+  const atU = (t) => lerpP(so, elb, t), atF = (t) => lerpP(elb, wr, t);
+  const ru = r.ua[0], rf = r.fa[0];
+  let skin = circlePath(so, ru * 1.12) // Schulter (Deltamuskel)
+    + capsule(so, elb, ru, r.ua[1])
+    + circlePath(elb, r.ua[1] * 0.95)
+    + capsule(elb, wr, rf, r.fa[1])
+    + capsule(atF(0.06), atF(0.45), rf * 1.1, rf * 0.92); // Unterarm-Muskel
+  if (st.sideView) {
+    skin += capsule(offs(atU(0.38), aU, ru * 0.34), offs(atU(0.72), aU, ru * 0.3), ru * 0.7, ru * 0.55); // Bizeps
+    skin += capsule(offs(atU(0.25), aU, -ru * 0.3), offs(atU(0.6), aU, -ru * 0.26), ru * 0.66, ru * 0.52); // Trizeps
+  }
+  // Hand: Handfläche, Finger, Daumen
+  const rh = r.hand;
+  const palmEnd = offs(wr, dF, 4.2);
+  skin += capsule(offs(wr, dF, 0.6), palmEnd, rh * 0.86, rh * 0.78)
+    + capsule(palmEnd, offs(wr, dF, 6.6), rh * 0.7, rh * 0.5)
+    + capsule(offs(offs(wr, dF, 1.2), aF, rh * 0.55), offs(offs(wr, dF, 3.4), aF, rh * 1.45), 1.05, 0.85);
+  const detail = polyline([offs(atU(0.12), aU, ru * 0.95), offs(atU(0.42), aU, ru * 0.05), offs(atU(0.12), aU, -ru * 0.95)]) // Deltamuskel
+    + polyline([offs(palmEnd, aF, rh * 0.62), offs(palmEnd, aF, -rh * 0.62)]); // Fingeransatz
+  return { skin, cloth: '', detail };
 }
 
-function legGeo(p, s) {
+function legGeo(p, s, st) {
   const hip = p['hip' + s], kn = p['kn' + s], an = p['an' + s], to = p['to' + s];
   const r = BODY_R;
+  const sign = st.mirrored ? -1 : 1;
+  const dT = unitV(hip, kn), dS = unitV(kn, an);
+  const aT = antOf(dT, sign), aS = antOf(dS, sign);
+  const atT = (t) => lerpP(hip, kn, t), atS = (t) => lerpP(kn, an, t);
+  const rt = r.th[0], rs = r.sh[0];
+  let skin = capsule(hip, kn, rt, r.th[1]) + circlePath(kn, r.th[1] * 0.98) + capsule(kn, an, rs, r.sh[1]);
+  let detail = '';
+  if (st.sideView) {
+    skin += capsule(offs(atT(0.3), aT, rt * 0.42), offs(atT(0.72), aT, rt * 0.34), rt * 0.66, rt * 0.56); // Quadrizeps
+    skin += capsule(offs(atT(0.3), aT, -rt * 0.36), offs(atT(0.66), aT, -rt * 0.3), rt * 0.62, rt * 0.5); // Beinbeuger
+    skin += capsule(offs(atS(0.16), aS, -rs * 0.42), offs(atS(0.5), aS, -rs * 0.26), rs * 0.74, rs * 0.52); // Wade
+    detail += polyline([offs(atT(0.22), aT, rt * 0.2), offs(atT(0.52), aT, rt * 0.36), offs(atT(0.86), aT, rt * 0.16)]); // Muskellinie Oberschenkel
+    detail += polyline([offs(atS(0.1), aS, -rs * 0.15), offs(atS(0.32), aS, -rs * 0.5), offs(atS(0.58), aS, -rs * 0.2)]); // Wadenlinie
+    detail += circlePath(offs(kn, aT, r.th[1] * 0.55), 1.5); // Kniescheibe
+    detail += circlePath(an, 1.1); // Knöchel
+  } else {
+    skin += capsule(atS(0.14), atS(0.5), rs * 1.08, rs * 0.82); // Waden (Frontansicht)
+    detail += circlePath(kn, 1.9); // Kniescheibe
+  }
+  // Fuß: Ferse, Mittelfuß, Zehen
   const fl = Math.hypot(to[0] - an[0], to[1] - an[1]);
-  let foot;
-  if (fl > 1) {
-    const ux = (to[0] - an[0]) / fl, uy = (to[1] - an[1]) / fl;
-    foot = capsule([an[0] - ux * 2.2, an[1] - uy * 2.2], to, r.foot[0], r.foot[1]);
-  } else foot = circlePath(an, r.foot[0]);
+  if (fl > 2) {
+    const fd = unitV(an, to);
+    const ball = offs(an, fd, fl * 0.66);
+    skin += capsule(offs(an, fd, -2.4), ball, r.foot[0], r.foot[0] * 0.82)
+      + capsule(ball, offs(to, fd, 0.8), r.foot[1] * 1.05, r.foot[1] * 0.8);
+    const fa = antOf(fd, sign);
+    detail += polyline([offs(ball, fa, r.foot[1] * 0.9), offs(ball, fa, -r.foot[1] * 0.9)]); // Zehenansatz
+  } else skin += circlePath(an, r.foot[0]);
   return {
-    skin: capsule(hip, kn, r.th[0], r.th[1]) + capsule(kn, an, r.sh[0], r.sh[1]) + foot,
-    cloth: capsule(hip, lerpP(hip, kn, 0.34), r.th[0] + 0.4, r.th[0] + 0.1),
+    skin,
+    cloth: capsule(hip, lerpP(hip, kn, 0.34), rt + 0.6, rt + 0.3),
+    detail,
   };
+}
+
+function torsoGeo(p, st) {
+  const sign = st.mirrored ? -1 : 1;
+  const at = (t, o) => { const { P, n, w } = spineAt(p, t); return [P[0] + n[0] * w * o * sign, P[1] + n[1] * w * o * sign]; };
+  let cloth = torsoBand(p, 0, 0.22, -1.06, 1.06); // Shorts
+  let detail = '';
+  let skin = torsoBand(p, 0, 1);
+  if (GENDER === 'f') {
+    cloth += torsoBand(p, 0.62, 0.88, -1.05, 1.05); // Sport-Top
+    if (st.sideView) {
+      const { w } = spineAt(p, 0.76);
+      const bust = circlePath(at(0.75, 0.55), w * 0.5);
+      skin += bust;
+      cloth += bust;
+    }
+  }
+  if (st.sideView) {
+    if (GENDER === 'm') detail += polyline([at(0.6, 0.95), at(0.7, 0.55), at(0.84, 0.42)]); // Brustmuskel
+    detail += polyline([at(0.6, -0.5), at(0.74, -0.68), at(0.9, -0.52)]); // Schulterblatt
+    detail += polyline([at(0.28, 0.92), at(0.4, 0.7), at(0.55, 0.9)]); // Bauch / Rippenbogen
+  } else {
+    detail += polyline([at(0.26, 0), at(0.6, 0)]); // Bauchmitte
+    if (GENDER === 'm') detail += polyline([at(0.66, -0.85), at(0.73, -0.4), at(0.78, 0)]) + polyline([at(0.66, 0.85), at(0.73, 0.4), at(0.78, 0)]);
+    detail += polyline([at(0.42, -0.5), at(0.42, 0.5)]) + circlePath(at(0.3, 0), 0.5);
+  }
+  return { skin, cloth, detail };
 }
 
 function headGeo(p, st) {
   const nd = Math.hypot(p.head[0] - p.sc[0], p.head[1] - p.sc[1]) || 1;
   const ux = (p.head[0] - p.sc[0]) / nd, uy = (p.head[1] - p.sc[1]) / nd;
+  const u = [ux, uy];
   // Blickrichtung: Halsrichtung um 90° gedreht (gespiegelt bei Seite 2)
-  const fx = st.mirrored ? uy : -uy, fy = st.mirrored ? -ux : ux;
+  const f = st.mirrored ? [uy, -ux] : [-uy, ux];
   const R = BODY_R.head;
   let skin = capsule(p.sc, p.head, BODY_R.neck, BODY_R.neck) + circlePath(p.head, R);
-  let eye = '';
+  let eye = '', detail = '', hair = '';
   if (st.nose) {
-    skin += circlePath([p.head[0] + fx * (R - 0.3), p.head[1] + fy * (R - 0.3) + 0], 1.9);
-    eye = circlePath([p.head[0] + fx * 4.6 + ux * 1.6, p.head[1] + fy * 4.6 + uy * 1.6], 0.95);
+    skin += circlePath(offs(p.head, f, R - 0.3), 1.9);
+    skin += circlePath(offs(offs(p.head, f, R - 2.2), u, -3.6), 2.1); // Kinn
+    eye = circlePath(offs(offs(p.head, f, 4.6), u, 1.6), 0.95);
+    detail += circlePath(offs(offs(p.head, f, -0.8), u, -0.2), 1.8); // Ohr
   }
-  let hair = '';
   if (st.hair === 'back') {
-    // Haarkappe am Hinterkopf
-    hair = circlePath([p.head[0] - fx * 1.8 + ux * 1.2, p.head[1] - fy * 1.8 + uy * 1.2], R + 0.4);
-  } else if (st.hair === 'top') hair = circlePath([p.head[0] + ux * 2.2, p.head[1] + uy * 2.2], R + 0.2);
-  return { skin, hair, eye };
+    hair = circlePath(offs(offs(p.head, f, -1.8), u, 1.2), R + 0.4);
+    if (GENDER === 'f') {
+      const base = offs(offs(p.head, f, -R * 0.78), u, R * 0.45);
+      hair += circlePath(base, 2.4) + capsule(base, offs(offs(base, f, -4.5), u, -9), 2.8, 1.4); // Pferdeschwanz
+    }
+  } else if (st.hair === 'top') {
+    hair = circlePath(offs(p.head, u, 2.2), R + 0.2);
+    if (GENDER === 'f') hair += circlePath(offs(p.head, u, R + 1.2), 2.6); // Dutt / Zopfansatz
+  }
+  return { skin, hair, eye, detail };
 }
 
 function figStyle(anim) {
@@ -361,6 +460,7 @@ function buildBody(g, order) {
       cloth: el('path', { class: 'cloth' }, grp),
       hl: el('path', { class: 'hl' }, grp),
       hl2: el('path', { class: 'hl2' }, grp),
+      detail: el('path', { class: 'detail' }, grp),
     };
   };
   const b = {};
@@ -385,11 +485,11 @@ function drawBody(b, p, st, target) {
     part.hl.setAttribute('d', regionPaths(p, prim, st, owner));
     part.hl2.setAttribute('d', regionPaths(p, sec, st, owner));
     part.line.setAttribute('d', geo.skin + geo.cloth);
+    part.detail.setAttribute('d', geo.detail || '');
   };
-  set(b.farArm, armGeo(p, 'F'), 'armF');
-  set(b.farLeg, legGeo(p, 'F'), 'F');
-  const torso = torsoBand(p, 0, 1);
-  set(b.torso, { skin: torso, cloth: torsoBand(p, 0, 0.22, -1.06, 1.06) }, 'torso');
+  set(b.farArm, armGeo(p, 'F', st), 'armF');
+  set(b.farLeg, legGeo(p, 'F', st), 'F');
+  set(b.torso, torsoGeo(p, st), 'torso');
   const hg = headGeo(p, st);
   b.head.hair.setAttribute('d', hg.hair);
   b.head.skin.setAttribute('d', hg.skin);
@@ -397,10 +497,11 @@ function drawBody(b, p, st, target) {
   b.head.hl.setAttribute('d', regionPaths(p, prim, st, 'neck'));
   b.head.hl2.setAttribute('d', regionPaths(p, sec, st, 'neck'));
   b.head.line.setAttribute('d', hg.skin + hg.hair);
+  b.head.detail.setAttribute('d', hg.detail);
   b.head.eye.setAttribute('d', hg.eye);
-  set(b.nearLeg, legGeo(p, 'N'), 'N');
-  set(b.nearArm, armGeo(p, 'N'), 'armN');
-  // Schultern gehören zum Arm: als eigener Besitzer behandeln
+  set(b.nearLeg, legGeo(p, 'N', st), 'N');
+  set(b.nearArm, armGeo(p, 'N', st), 'armN');
+  // Schultern gehören zum Arm
   b.nearArm.hl.setAttribute('d', shoulderPaths(p, prim, st, 'N'));
   b.nearArm.hl2.setAttribute('d', shoulderPaths(p, sec, st, 'N'));
   b.farArm.hl.setAttribute('d', shoulderPaths(p, prim, st, 'F'));
