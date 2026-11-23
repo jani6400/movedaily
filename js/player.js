@@ -1,7 +1,7 @@
 // Workout-Player: Timer, Ablaufsteuerung, Ansagen.
 
 import { BY_ID, CATS } from './exercises.js';
-import { createFigure, mirror } from './figure.js';
+import { createFigure, mirror, MUSCLES } from './figure.js';
 import { store } from './storage.js';
 import { workoutSeconds } from './generator.js';
 import * as sig from './signals.js';
@@ -140,6 +140,8 @@ export function startPlayer(workout, { onExit }) {
     const cat = CATS[e.cat];
     const chips = [h('span', { class: 'chip' }, h('span', { class: `cat cat-${e.cat}` }, [icon(CAT_ICON[e.cat]), cat.label])), h('span', { class: 'chip' }, amountText(e, it))];
     if (s.kind === 'work' && s.side) chips.push(h('span', { class: 'chip side' }, s.side === 1 ? 'Seite 1' : 'Seite 2'));
+    const focus = [...new Set((e.target?.p || []).map((x) => MUSCLES[x.m]?.label).filter(Boolean))];
+    if (focus.length) chips.push(h('span', { class: 'chip target-chip' }, [h('i', { class: 'swatch p', 'aria-hidden': 'true' }), focus.join(' · ')]));
     meta.replaceChildren(...chips);
     stepsList.replaceChildren(...e.steps.map((t) => h('li', {}, t)));
     tip.replaceChildren(icon('bulb'), h('span', {}, e.tip));

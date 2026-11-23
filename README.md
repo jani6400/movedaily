@@ -9,7 +9,7 @@ Läuft als installierbare Web-App (PWA) auf dem Handy, offline, ohne Anmeldung. 
 2. **Fokuswahl** – Mix, Mobility, Kräftigung, Dehnen, Entspannung
 3. **Workout-Player** – Kreis-Timer, Vorbereitungszeit mit Vorschau, Pause / Weiter / Zurück
 4. **Zeit- oder Wiederholungs-Übungen** – inkl. automatischem Seitenwechsel bei einseitigen Übungen
-5. **Animierte Figuren** – jede Übung als animierte Strichfigur mit Bewegungspfeilen und Anleitung
+5. **Animierte Figuren** – Line-Art-Figur je Übung, beanspruchte Muskeln (rot/orange) und Gelenke hervorgehoben
 6. **Favoriten ❤️ & Ausblenden 🚫** – Favoriten kommen öfter dran, ausgeblendete nie wieder
 7. **Übungsbibliothek** – 66 Übungen (Schwerpunkt Dehnen), filterbar nach Kategorie, Körperbereich, Favoriten
 8. **Tägliche Routine** – Workout des Tages (Thema je Wochentag), Serie 🔥 und Kalender

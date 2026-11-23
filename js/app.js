@@ -1,7 +1,7 @@
 // App-Shell: Navigation und Ansichten (Heute, Vorschau, Bibliothek, Verlauf, Einstellungen).
 
 import { EXERCISES, BY_ID, CATS, AREAS, formatAmount } from './exercises.js';
-import { createFigure } from './figure.js';
+import { createFigure, MUSCLES, JOINTS } from './figure.js';
 import { store, dateKey } from './storage.js';
 import { generate, dailyWorkout, swapItem, singleWorkout, DURATIONS, FOCI } from './generator.js';
 import { startPlayer, estimateText } from './player.js';
@@ -35,6 +35,20 @@ function stage(e, cls = 'stage', opts = {}) {
   const box = h('div', { class: cls });
   box.append(createFigure(e.anim, { animate: false, aspect: 1.35, ...opts }).svg);
   return box;
+}
+
+// Beanspruchte Bereiche als Text
+const uniq = (arr) => [...new Set(arr)];
+export function muscleNames(list = []) { return uniq(list.map((x) => MUSCLES[x.m]?.label || JOINTS[x.m]).filter(Boolean)); }
+function targetBlock(e) {
+  const t = e.target || {};
+  const row = (cls, title, names) => names.length ? h('div', { class: 'target-row' }, [h('span', { class: 'swatch ' + cls, 'aria-hidden': 'true' }), h('div', {}, [h('span', { class: 'target-kind' }, title), h('span', {}, names.join(', '))])]) : null;
+  const rows = [
+    row('p', 'Hauptziel', muscleNames(t.p)),
+    row('s', 'Mitbeteiligt', muscleNames(t.s)),
+    row('j', 'Gelenk', muscleNames(t.j)),
+  ].filter(Boolean);
+  return rows.length ? h('div', { class: 'target' }, rows) : null;
 }
 
 const catLabel = (c) => h('span', { class: `cat cat-${c}` }, [icon(CAT_ICON[c]), CATS[c].label]);
@@ -265,6 +279,7 @@ function openDetail(e) {
       e.wall ? h('span', { class: 'chip' }, [icon('wall'), 'Wand']) : null,
     ]),
     h('p', { class: 'amount' }, [icon('clock'), formatAmount(e)]),
+    targetBlock(e),
     h('h3', { class: 'sub-title' }, 'So geht’s'),
     h('ol', { class: 'steps' }, e.steps.map((t) => h('li', {}, t))),
     h('p', { class: 'tip' }, [icon('bulb'), h('span', {}, e.tip)]),
@@ -309,6 +324,7 @@ function libraryView() {
       store.isHidden(e.id) ? h('span', { class: 'badge-ico', 'aria-label': 'Ausgeblendet' }, icon('eyeoff')) : null,
       h('b', {}, e.name),
       h('span', { class: 'meta' }, [catLabel(e.cat)]),
+      muscleNames(e.target?.p).length ? h('span', { class: 'muscle small' }, muscleNames(e.target.p).join(' · ')) : null,
       h('span', { class: 'tertiary small' }, formatAmount(e)),
     ])));
     if (!list.length) grid.append(h('p', { class: 'empty' }, libFilter.list === 'fav' ? 'Noch keine Favoriten. Tippe bei einer Übung auf „Favorisieren“, dann kommt sie öfter dran.' : libFilter.list === 'hidden' ? 'Keine ausgeblendeten Übungen.' : 'Keine Übung gefunden. Probier einen anderen Suchbegriff oder Filter.'));
@@ -455,7 +471,7 @@ function settingsView() {
         if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
       }, 'destructive'),
     ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
-    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.2'),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 1.3'),
   );
 }
 

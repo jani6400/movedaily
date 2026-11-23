@@ -460,11 +460,98 @@ export const EXERCISES = [
   },
 ];
 
+// ---------- Zielbereiche (für Highlights) ----------
+// p = Hauptziel (rot), s = mitbeteiligt (orange), j = Gelenke (Ring).
+// ":N" = vorderes/nahes Bein bzw. Arm, ":F" = hinteres/fernes; ohne Angabe = beide.
+const TARGETS = {
+  'cat-cow': 'p:lowerback,upperback; j:spine',
+  'hip-cars': 'p:glutes:N; s:hipflexors:N; j:hip:N',
+  'worlds-greatest': 'p:hipflexors:F,adductors:N; s:upperback; j:hip:N',
+  'deep-squat': 'p:adductors,glutes; s:calves; j:hip,knee',
+  'frog-rock': 'p:adductors; j:hip',
+  'windshield': 'p:glutes; s:hipflexors; j:hip',
+  'hip-flexor': 'p:hipflexors:F; s:quads:F,abs',
+  'cossack': 'p:adductors:F,quads:N; s:glutes:N; j:hip,knee:N',
+  'thread-needle': 'p:upperback; s:shoulders:N; j:spine',
+  'open-book': 'p:chest; s:upperback; j:spine',
+  'cobra': 'p:abs; s:lowerback; j:spine',
+  't-spine-quad': 'p:upperback; s:shoulders:N; j:spine',
+  'heel-slides': 'p:hamstrings:N; j:knee:N',
+  'heel-sit': 'p:quads,shins; j:knee,ankle',
+  'couch-stretch': 'p:quads:F,hipflexors:F; s:glutes:F; j:knee:F',
+  'down-dog': 'p:hamstrings,calves; s:shoulders,upperback',
+  'glute-bridge': 'p:glutes; s:hamstrings',
+  'single-bridge': 'p:glutes:F; s:hamstrings:F,abs',
+  'frog-pumps': 'p:glutes; s:adductors',
+  'bridge-march': 'p:glutes; s:abs,hamstrings',
+  'wall-sit': 'p:quads; s:glutes; j:knee',
+  'plank': 'p:abs; s:shoulders,glutes',
+  'side-plank': 'p:obliques; s:glutes,shoulders:F',
+  'clamshell': 'p:glutes:N; j:hip:N',
+  'donkey-kick': 'p:glutes:N; s:hamstrings:N',
+  'fire-hydrant': 'p:glutes:N; j:hip:N',
+  'squat': 'p:quads,glutes; s:hamstrings; j:knee',
+  'reverse-lunge': 'p:quads:N,glutes:N; s:hamstrings:N; j:knee:N',
+  'side-leg-raise': 'p:glutes:N; j:hip:N',
+  'calf-raise': 'p:calves; j:ankle',
+  'dead-bug': 'p:abs; s:hipflexors',
+  'sumo-squat': 'p:adductors,glutes; s:quads; j:hip',
+  'superman': 'p:lowerback; s:glutes,upperback',
+  'bird-dog': 'p:glutes:N,lowerback; s:abs,shoulders:F',
+  'straight-leg-raise': 'p:quads:N; s:hipflexors:N; j:knee:N',
+  'tibialis-raise': 'p:shins; j:ankle',
+  'y-w-raise': 'p:upperback; s:shoulders',
+  'pigeon': 'p:glutes:N; s:hipflexors:F; j:hip:N',
+  'figure-four': 'p:glutes:N; j:hip:N',
+  'butterfly': 'p:adductors; j:hip',
+  'hamstring-supine': 'p:hamstrings:N; s:calves:N',
+  'quad-side': 'p:quads:N; s:hipflexors:N; j:knee:N',
+  'seated-fold': 'p:hamstrings; s:lowerback,calves',
+  'straddle-bend': 'p:obliques; s:adductors',
+  'child-pose': 'p:lowerback; s:glutes,upperback',
+  'happy-baby': 'p:adductors; s:glutes,lowerback; j:hip',
+  'knees-chest': 'p:lowerback; s:glutes',
+  'supine-twist': 'p:obliques,lowerback; s:glutes; j:spine',
+  'legs-wall': 'p:hamstrings; s:calves',
+  'box-breathing': 's:abs',
+  'body-scan': '',
+  'lizard': 'p:hipflexors:F,adductors:N; s:glutes:N; j:hip',
+  'half-splits': 'p:hamstrings:N; s:calves:N; j:knee:N',
+  'kneeling-adductor': 'p:adductors:N; j:hip:N',
+  'gate-pose': 'p:obliques; s:adductors:N',
+  'reclined-butterfly': 'p:adductors; j:hip',
+  'straddle-fold': 'p:adductors,hamstrings; s:lowerback',
+  'banana': 'p:obliques; s:lowerback',
+  'head-to-knee': 'p:hamstrings:N; s:lowerback,calves:N',
+  'chest-opener': 'p:chest,shoulders; s:upperback',
+  'neck-stretch': 'p:neck; s:shoulders:F',
+  'seated-twist': 'p:obliques; s:lowerback; j:spine',
+  'toe-squat': 'p:feet; s:shins; j:ankle',
+  'kneeling-quad': 'p:quads:N,hipflexors:N; j:knee:N',
+  'ragdoll': 'p:hamstrings,lowerback; s:calves',
+  'knee-hug-single': 'p:glutes:N; s:hipflexors:F,lowerback',
+};
+
+function parseTarget(str = '') {
+  const t = { p: [], s: [], j: [] };
+  for (const part of str.split(';')) {
+    const [k, v] = part.split(':').length > 1 ? [part.slice(0, part.indexOf(':')).trim(), part.slice(part.indexOf(':') + 1)] : [null, ''];
+    if (!k || !t[k]) continue;
+    for (const item of v.split(',')) {
+      const [m, side] = item.trim().split(':');
+      if (m) t[k].push({ m, side: side || null });
+    }
+  }
+  return t;
+}
+
 export const BY_ID = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 
 for (const e of EXERCISES) {
   e.wall = !!e.anim.wall;
   e.cat = e.cats[0];
+  e.target = parseTarget(TARGETS[e.id]);
+  e.anim.target = e.target;
 }
 
 // geschätzte Dauer einer Übung in Sekunden (beide Seiten)

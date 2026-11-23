@@ -166,19 +166,20 @@ function el(tag, attrs, parent) {
   return e;
 }
 
-// ---------- Figur zeichnen (detailliert) ----------
-// Jede Gliedmaße ist eine sich verjüngende Kapsel. Kleidung (Shirt, Shorts) und
-// eine Kontur in Hintergrundfarbe trennen überlappende Körperteile.
+// ---------- Figur zeichnen (Line-Art) ----------
+// Stil: weiße Körperflächen mit dunkler Kontur, schwarze Haare und Shorts.
+// Beanspruchte Muskeln werden als Flächen auf dem Körper hervorgehoben
+// (rot = Hauptziel, orange = mitbeteiligt), Gelenke als Ring.
 const BODY_R = {
-  ua: [4.7, 3.7], fa: [3.5, 2.8], hand: 3.4,
-  th: [6.6, 4.6], sh: [4.6, 3.1], foot: [3.1, 2.0],
-  neck: 3.1, head: 8.6,
+  ua: [4.5, 3.6], fa: [3.4, 2.7], hand: 3.3,
+  th: [6.5, 4.5], sh: [4.5, 3.0], foot: [3.0, 1.9],
+  neck: 3.0, head: 8.6,
 };
-const TORSO_PROFILE = [[0, 6.6], [0.3, 5.7], [0.62, 7.0], [0.86, 7.5], [1, 6.4]]; // Halbbreite Hüfte → Schulter
-const OUT = 1.5; // Konturbreite
+const TORSO_PROFILE = [[0, 6.6], [0.3, 5.6], [0.62, 6.9], [0.86, 7.4], [1, 6.3]]; // Halbbreite Hüfte → Schulter
 
 const f1 = (n) => Math.round(n * 10) / 10;
 const lerpP = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+const poly = (pts) => 'M' + pts.map((q) => `${f1(q[0])} ${f1(q[1])}`).join('L') + 'Z';
 
 function circlePath(c, r) {
   return `M${f1(c[0] - r)} ${f1(c[1])}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0Z`;
@@ -203,72 +204,146 @@ function profileW(t) {
   return TORSO_PROFILE[TORSO_PROFILE.length - 1][1];
 }
 
-// Rumpf als Fläche entlang der (gebogenen) Wirbelsäule, Abschnitt t0..t1
-function torsoPath(p, t0, t1, grow = 0) {
+// Punkte entlang der Wirbelsäule: Mitte, Vorderseite-Normale, Halbbreite
+function spineAt(p, t) {
+  const u = 1 - t;
+  const P = [u * u * p.hip[0] + 2 * u * t * p.ctrl[0] + t * t * p.sc[0], u * u * p.hip[1] + 2 * u * t * p.ctrl[1] + t * t * p.sc[1]];
+  let tx = 2 * u * (p.ctrl[0] - p.hip[0]) + 2 * t * (p.sc[0] - p.ctrl[0]);
+  let ty = 2 * u * (p.ctrl[1] - p.hip[1]) + 2 * t * (p.sc[1] - p.ctrl[1]);
+  const tl = Math.hypot(tx, ty) || 1;
+  tx /= tl; ty /= tl;
   const hw = Math.hypot(p.hipN[0] - p.hip[0], p.hipN[1] - p.hip[1]);
   const sw = Math.hypot(p.soN[0] - p.sc[0], p.soN[1] - p.sc[1]);
-  const L = [], R = [];
-  const n = 8;
-  for (let i = 0; i <= n; i++) {
-    const t = t0 + ((t1 - t0) * i) / n;
-    const u = 1 - t;
-    const P = [u * u * p.hip[0] + 2 * u * t * p.ctrl[0] + t * t * p.sc[0], u * u * p.hip[1] + 2 * u * t * p.ctrl[1] + t * t * p.sc[1]];
-    let tx = 2 * u * (p.ctrl[0] - p.hip[0]) + 2 * t * (p.sc[0] - p.ctrl[0]);
-    let ty = 2 * u * (p.ctrl[1] - p.hip[1]) + 2 * t * (p.sc[1] - p.ctrl[1]);
-    const tl = Math.hypot(tx, ty) || 1;
-    tx /= tl; ty /= tl;
-    const w = profileW(t) + hw + (sw - hw) * t + grow;
-    L.push([P[0] - ty * w, P[1] + tx * w]);
-    R.push([P[0] + ty * w, P[1] - tx * w]);
-  }
-  const fmtq = (q) => `${f1(q[0])} ${f1(q[1])}`;
-  return 'M' + L.map(fmtq).join('L') + 'L' + R.reverse().map(fmtq).join('L') + 'Z';
+  return { P, n: [-ty, tx], w: profileW(t) + hw + (sw - hw) * t };
 }
 
-function armGeo(p, s, g = 0) {
+// Rumpfabschnitt t0..t1 zwischen den Seiten-Anteilen o1..o2 (−1 = Rücken, +1 = Bauch)
+function torsoBand(p, t0, t1, o1 = -1, o2 = 1, sign = 1) {
+  const A = [], B = [];
+  for (let i = 0; i <= 8; i++) {
+    const { P, n, w } = spineAt(p, t0 + ((t1 - t0) * i) / 8);
+    A.push([P[0] + n[0] * w * o2 * sign, P[1] + n[1] * w * o2 * sign]);
+    B.push([P[0] + n[0] * w * o1 * sign, P[1] + n[1] * w * o1 * sign]);
+  }
+  return poly(A.concat(B.reverse()));
+}
+
+// Abschnitt einer Gliedmaße (a→b, Radien ra→rb) zwischen den Seiten-Anteilen o1..o2
+function limbBand(a, b, ra, rb, t0, t1, o1, o2, sign = 1) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const L = Math.hypot(dx, dy) || 1;
+  const nx = (dy / L) * sign, ny = (-dx / L) * sign; // Vorderseite
+  const at = (t, o) => {
+    const P = lerpP(a, b, t);
+    const r = ra + (rb - ra) * t;
+    return [P[0] + nx * r * o, P[1] + ny * r * o];
+  };
+  return poly([at(t0, o1), at(t1, o1), at(t1, o2), at(t0, o2)]);
+}
+
+// Muskelgruppen: Segment, Abschnitt [t0, t1], Seite (ant = vorn, post = hinten, mid = Mitte)
+export const MUSCLES = {
+  quads: { label: 'Oberschenkel vorn', parts: [['th', 0.14, 0.86, 'ant']] },
+  hamstrings: { label: 'Oberschenkel hinten', parts: [['th', 0.12, 0.9, 'post']] },
+  glutes: { label: 'Po', parts: [['torso', 0, 0.2, 'post'], ['th', 0, 0.3, 'post']] },
+  hipflexors: { label: 'Hüftbeuger', parts: [['torso', 0, 0.22, 'ant'], ['th', 0, 0.34, 'ant']] },
+  adductors: { label: 'Innenschenkel', parts: [['th', 0.06, 0.66, 'mid']] },
+  calves: { label: 'Waden', parts: [['sh', 0.08, 0.6, 'post']] },
+  shins: { label: 'Schienbein', parts: [['sh', 0.1, 0.85, 'ant']] },
+  abs: { label: 'Bauch', parts: [['torso', 0.22, 0.62, 'ant']] },
+  obliques: { label: 'Seitliche Bauchmuskeln', parts: [['torso', 0.18, 0.62, 'mid']] },
+  lowerback: { label: 'Unterer Rücken', parts: [['torso', 0.1, 0.48, 'post']] },
+  upperback: { label: 'Oberer Rücken', parts: [['torso', 0.52, 0.96, 'post']] },
+  chest: { label: 'Brust', parts: [['torso', 0.6, 0.93, 'ant']] },
+  shoulders: { label: 'Schultern', parts: [['ua', 0, 0.36, 'mid'], ['torso', 0.9, 1, 'mid']] },
+  neck: { label: 'Nacken', parts: [['neck', 0, 1, 'mid']] },
+  feet: { label: 'Fußsohlen', parts: [['foot', 0, 1, 'mid']] },
+};
+export const JOINTS = { hip: 'Hüfte', knee: 'Knie', spine: 'Wirbelsäule', ankle: 'Sprunggelenk', shoulder: 'Schulter' };
+
+const SIDE_O = { ant: [0.16, 0.84], post: [-0.84, -0.16], mid: [-0.55, 0.55], full: [-0.78, 0.78] };
+
+// Highlight-Pfade für eine Körperseite (N/F) bzw. den Rumpf
+function regionPaths(p, list, st, owner) {
+  let d = '';
+  for (const { m, side } of list) {
+    const mus = MUSCLES[m];
+    if (!mus) continue;
+    for (const [seg, t0, t1, where0] of mus.parts) {
+      const where = st.sideView ? where0 : (where0 === 'mid' ? 'mid' : 'full');
+      const [o1, o2] = SIDE_O[where];
+      const sign = st.mirrored ? -1 : 1;
+      if (seg === 'torso' || seg === 'neck') {
+        if (owner !== seg) continue;
+        if (seg === 'torso') d += torsoBand(p, t0, t1, o1, o2, sign);
+        else d += capsule(p.sc, p.head, BODY_R.neck * 0.9, BODY_R.neck * 0.9);
+        continue;
+      }
+      if (owner !== 'N' && owner !== 'F') continue;
+      if (side && side !== owner) continue;
+      const s = owner;
+      const r = BODY_R;
+      if (seg === 'ua') continue; // Schultern: siehe shoulderPaths
+      if (seg === 'th') d += limbBand(p['hip' + s], p['kn' + s], r.th[0], r.th[1], t0, t1, o1, o2, sign);
+      else if (seg === 'sh') d += limbBand(p['kn' + s], p['an' + s], r.sh[0], r.sh[1], t0, t1, o1, o2, sign);
+      else if (seg === 'ua') d += limbBand(p['so' + s], p['el' + s], r.ua[0], r.ua[1], t0, t1, o1, o2, sign);
+      else if (seg === 'foot') {
+        const an = p['an' + s], to = p['to' + s];
+        if (Math.hypot(to[0] - an[0], to[1] - an[1]) > 1) d += limbBand(an, to, r.foot[0], r.foot[1], 0, 1, -0.85, 0.85, sign);
+      }
+    }
+  }
+  return d;
+}
+
+function armGeo(p, s) {
   const so = p['so' + s], elb = p['el' + s], wr = p['wr' + s];
   const r = BODY_R;
   const fd = Math.hypot(wr[0] - elb[0], wr[1] - elb[1]) || 1;
   const hand = [wr[0] + ((wr[0] - elb[0]) / fd) * 1.6, wr[1] + ((wr[1] - elb[1]) / fd) * 1.6];
-  return {
-    skin: capsule(so, elb, r.ua[0] + g, r.ua[1] + g) + capsule(elb, wr, r.fa[0] + g, r.fa[1] + g) + circlePath(hand, r.hand + g),
-    cloth: capsule(so, lerpP(so, elb, 0.42), r.ua[0] + 0.9 + g, r.ua[0] + 0.5 + g),
-  };
+  return { skin: capsule(so, elb, r.ua[0], r.ua[1]) + capsule(elb, wr, r.fa[0], r.fa[1]) + circlePath(hand, r.hand), cloth: '' };
 }
 
-function legGeo(p, s, g = 0) {
+function legGeo(p, s) {
   const hip = p['hip' + s], kn = p['kn' + s], an = p['an' + s], to = p['to' + s];
   const r = BODY_R;
   const fl = Math.hypot(to[0] - an[0], to[1] - an[1]);
   let foot;
   if (fl > 1) {
     const ux = (to[0] - an[0]) / fl, uy = (to[1] - an[1]) / fl;
-    foot = capsule([an[0] - ux * 2.2, an[1] - uy * 2.2], to, r.foot[0] + g, r.foot[1] + g);
-  } else foot = circlePath(an, r.foot[0] + g);
+    foot = capsule([an[0] - ux * 2.2, an[1] - uy * 2.2], to, r.foot[0], r.foot[1]);
+  } else foot = circlePath(an, r.foot[0]);
   return {
-    skin: capsule(hip, kn, r.th[0] + g, r.th[1] + g) + capsule(kn, an, r.sh[0] + g, r.sh[1] + g) + foot,
-    cloth: capsule(hip, lerpP(hip, kn, 0.34), r.th[0] + 0.5 + g, r.th[0] + 0.2 + g),
+    skin: capsule(hip, kn, r.th[0], r.th[1]) + capsule(kn, an, r.sh[0], r.sh[1]) + foot,
+    cloth: capsule(hip, lerpP(hip, kn, 0.34), r.th[0] + 0.4, r.th[0] + 0.1),
   };
 }
 
-function headGeo(p, st, g = 0) {
+function headGeo(p, st) {
   const nd = Math.hypot(p.head[0] - p.sc[0], p.head[1] - p.sc[1]) || 1;
   const ux = (p.head[0] - p.sc[0]) / nd, uy = (p.head[1] - p.sc[1]) / nd;
   // Blickrichtung: Halsrichtung um 90° gedreht (gespiegelt bei Seite 2)
   const fx = st.mirrored ? uy : -uy, fy = st.mirrored ? -ux : ux;
   const R = BODY_R.head;
-  let skin = capsule(p.sc, p.head, BODY_R.neck + g, BODY_R.neck + g) + circlePath(p.head, R + g);
-  if (st.nose) skin += circlePath([p.head[0] + fx * (R - 0.4), p.head[1] + fy * (R - 0.4)], 2 + g);
+  let skin = capsule(p.sc, p.head, BODY_R.neck, BODY_R.neck) + circlePath(p.head, R);
+  let eye = '';
+  if (st.nose) {
+    skin += circlePath([p.head[0] + fx * (R - 0.3), p.head[1] + fy * (R - 0.3) + 0], 1.9);
+    eye = circlePath([p.head[0] + fx * 4.6 + ux * 1.6, p.head[1] + fy * 4.6 + uy * 1.6], 0.95);
+  }
   let hair = '';
-  if (st.hair === 'back') hair = circlePath([p.head[0] - fx * 1.6 + ux * 0.9, p.head[1] - fy * 1.6 + uy * 0.9], R + 0.6 + g);
-  else if (st.hair === 'top') hair = circlePath([p.head[0] + ux * 1.7, p.head[1] + uy * 1.7], R + 0.3 + g);
-  return { skin, hair };
+  if (st.hair === 'back') {
+    // Haarkappe am Hinterkopf
+    hair = circlePath([p.head[0] - fx * 1.8 + ux * 1.2, p.head[1] - fy * 1.8 + uy * 1.2], R + 0.4);
+  } else if (st.hair === 'top') hair = circlePath([p.head[0] + ux * 2.2, p.head[1] + uy * 2.2], R + 0.2);
+  return { skin, hair, eye };
 }
 
 function figStyle(anim) {
   const side = !anim.label && anim.view !== 'top';
   return {
     order: anim.order,
+    sideView: side,
     nose: side,
     hair: anim.view === 'top' ? null : side ? 'back' : 'top',
     mirrored: !!anim.mirrored,
@@ -277,40 +352,80 @@ function figStyle(anim) {
 
 // order 'front': beide Beine vor dem Rumpf (Front-/Rückansicht)
 function buildBody(g, order) {
-  const part = (cls, cloth) => {
+  const part = (cls) => {
     const grp = el('g', { class: 'part ' + cls }, g);
-    return { out: el('path', { class: 'outline' }, grp), skin: el('path', { class: 'skin' }, grp), cloth: el('path', { class: cloth }, grp) };
+    // Kontur zuerst (dicke Linie), Flächen darüber: so bleibt nur die äußere Silhouette sichtbar
+    return {
+      line: el('path', { class: 'line' }, grp),
+      skin: el('path', { class: 'skin' }, grp),
+      cloth: el('path', { class: 'cloth' }, grp),
+      hl: el('path', { class: 'hl' }, grp),
+      hl2: el('path', { class: 'hl2' }, grp),
+    };
   };
   const b = {};
-  b.farArm = part('far', 'shirt');
-  if (order !== 'front') b.farLeg = part('far', 'shorts');
-  const tg = el('g', { class: 'part torso' }, g);
-  b.torso = { out: el('path', { class: 'outline' }, tg), shirt: el('path', { class: 'shirt' }, tg), shorts: el('path', { class: 'shorts' }, tg) };
-  const hg = el('g', { class: 'part head' }, g);
-  b.head = { out: el('path', { class: 'outline' }, hg), hair: el('path', { class: 'hair' }, hg), skin: el('path', { class: 'skin' }, hg) };
-  if (order === 'front') b.farLeg = part('far', 'shorts');
-  b.nearLeg = part('near', 'shorts');
-  b.nearArm = part('near', 'shirt');
+  b.farArm = part('far arm');
+  if (order !== 'front') b.farLeg = part('far leg');
+  b.torso = part('torso');
+  b.head = part('head');
+  b.head.hair = el('path', { class: 'hair' }, b.head.skin.parentNode);
+  b.head.skin.parentNode.insertBefore(b.head.hair, b.head.skin);
+  b.head.eye = el('path', { class: 'eye' }, b.head.skin.parentNode);
+  if (order === 'front') b.farLeg = part('far leg');
+  b.nearLeg = part('near leg');
+  b.nearArm = part('near arm');
   return b;
 }
 
-function drawBody(b, p, st) {
-  const setPart = (part, geo, outGeo) => {
-    part.out.setAttribute('d', outGeo.skin + outGeo.cloth);
+function drawBody(b, p, st, target) {
+  const prim = target?.p || [], sec = target?.s || [];
+  const set = (part, geo, owner) => {
     part.skin.setAttribute('d', geo.skin);
     part.cloth.setAttribute('d', geo.cloth);
+    part.hl.setAttribute('d', regionPaths(p, prim, st, owner));
+    part.hl2.setAttribute('d', regionPaths(p, sec, st, owner));
+    part.line.setAttribute('d', geo.skin + geo.cloth);
   };
-  setPart(b.farArm, armGeo(p, 'F'), armGeo(p, 'F', OUT));
-  setPart(b.farLeg, legGeo(p, 'F'), legGeo(p, 'F', OUT));
-  b.torso.out.setAttribute('d', torsoPath(p, 0, 1, OUT));
-  b.torso.shirt.setAttribute('d', torsoPath(p, 0.2, 1));
-  b.torso.shorts.setAttribute('d', torsoPath(p, 0, 0.22, 0.3));
-  const hg = headGeo(p, st), ho = headGeo(p, st, OUT);
-  b.head.out.setAttribute('d', ho.skin + ho.hair);
+  set(b.farArm, armGeo(p, 'F'), 'armF');
+  set(b.farLeg, legGeo(p, 'F'), 'F');
+  const torso = torsoBand(p, 0, 1);
+  set(b.torso, { skin: torso, cloth: torsoBand(p, 0, 0.22, -1.06, 1.06) }, 'torso');
+  const hg = headGeo(p, st);
   b.head.hair.setAttribute('d', hg.hair);
   b.head.skin.setAttribute('d', hg.skin);
-  setPart(b.nearLeg, legGeo(p, 'N'), legGeo(p, 'N', OUT));
-  setPart(b.nearArm, armGeo(p, 'N'), armGeo(p, 'N', OUT));
+  b.head.cloth.setAttribute('d', '');
+  b.head.hl.setAttribute('d', regionPaths(p, prim, st, 'neck'));
+  b.head.hl2.setAttribute('d', regionPaths(p, sec, st, 'neck'));
+  b.head.line.setAttribute('d', hg.skin + hg.hair);
+  b.head.eye.setAttribute('d', hg.eye);
+  set(b.nearLeg, legGeo(p, 'N'), 'N');
+  set(b.nearArm, armGeo(p, 'N'), 'armN');
+  // Schultern gehören zum Arm: als eigener Besitzer behandeln
+  b.nearArm.hl.setAttribute('d', shoulderPaths(p, prim, st, 'N'));
+  b.nearArm.hl2.setAttribute('d', shoulderPaths(p, sec, st, 'N'));
+  b.farArm.hl.setAttribute('d', shoulderPaths(p, prim, st, 'F'));
+  b.farArm.hl2.setAttribute('d', shoulderPaths(p, sec, st, 'F'));
+}
+
+function shoulderPaths(p, list, st, s) {
+  if (!list.some((x) => x.m === 'shoulders' && (!x.side || x.side === s))) return '';
+  const r = BODY_R;
+  const [o1, o2] = SIDE_O.mid;
+  return limbBand(p['so' + s], p['el' + s], r.ua[0], r.ua[1], 0, 0.36, o1 * 1.3, o2 * 1.3) + circlePath(p['so' + s], 4.2);
+}
+
+// Gelenk-Positionen für Ringe
+function jointPoints(p, joints) {
+  const out = [];
+  for (const { m, side } of joints || []) {
+    const sides = side ? [side] : ['N', 'F'];
+    if (m === 'hip') side ? out.push(p['hip' + side]) : out.push(p.hip);
+    else if (m === 'spine') out.push(p.spine);
+    else if (m === 'knee') sides.forEach((s) => out.push(p['kn' + s]));
+    else if (m === 'ankle') sides.forEach((s) => out.push(p['an' + s]));
+    else if (m === 'shoulder') sides.forEach((s) => out.push(p['so' + s]));
+  }
+  return out;
 }
 
 function arrowPaths(anim, prep) {
@@ -348,9 +463,6 @@ export function createFigure(anim, opts = {}) {
   const defs = el('defs', {}, svg);
   const m = el('marker', { id: id + 'a', viewBox: '0 0 10 10', refX: 6, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto-start-reverse' }, defs);
   el('path', { d: 'M0 0L10 5L0 10z', class: 'arrow-head' }, m);
-  const rg = el('radialGradient', { id: id + 'g' }, defs);
-  el('stop', { offset: '0%', 'stop-color': 'var(--red)', 'stop-opacity': '.75' }, rg);
-  el('stop', { offset: '100%', 'stop-color': 'var(--red)', 'stop-opacity': '0' }, rg);
 
   // Requisiten
   const props = el('g', { class: 'props' }, svg);
@@ -359,7 +471,7 @@ export function createFigure(anim, opts = {}) {
     el('rect', { x: fmt(b.minX - 8), y: fmt(b.minY - 8), width: fmt(b.maxX - b.minX + 16), height: fmt(b.maxY - b.minY + 16), rx: 8, class: 'mat-top' }, props);
   } else {
     el('line', { x1: fmt(vb.x0), x2: fmt(vb.x0 + vb.w), y1: 0, y2: 0, class: 'ground' }, props);
-    el('rect', { x: fmt(b.minX - 8), y: 0, width: fmt(b.maxX - b.minX + 16), height: 5, rx: 2.5, class: 'mat' }, props);
+    el('rect', { x: fmt(b.minX - 10), y: 0.4, width: fmt(b.maxX - b.minX + 20), height: 4, rx: 2, class: 'mat' }, props);
     if (anim.wall) {
       const x = anim.wall === 'left' ? b.minX - 2 : b.maxX + 2;
       const w = 7;
@@ -374,7 +486,7 @@ export function createFigure(anim, opts = {}) {
 
   if (ghost && prep.frames.length > 1) {
     const gg = el('g', { class: 'ghost' }, svg);
-    drawBody(buildBody(gg, anim.order), place(prep.frames[anim.ghostFrame ?? 0], anim), figStyle(anim));
+    drawBody(buildBody(gg, anim.order), place(prep.frames[anim.ghostFrame ?? 0], anim), figStyle(anim), null);
   }
 
   if (arrows) {
@@ -384,20 +496,19 @@ export function createFigure(anim, opts = {}) {
     }
   }
 
-  const gGlow = el('g', { class: 'glow' }, svg);
-  const glows = (anim.focus || []).map((k) => ({ k, c: el('circle', { r: 15, fill: `url(#${id}g)` }, gGlow) }));
-
   const gb = el('g', { class: 'body' }, svg);
   const body = buildBody(gb, anim.order);
   const st = figStyle(anim);
+  const target = opts.highlight === false ? null : anim.target;
+  const gJ = el('g', { class: 'joints' }, svg);
+  let rings = [];
 
   const render = (P) => {
     const p = place(P, anim);
-    drawBody(body, p, st);
-    for (const g of glows) {
-      g.c.setAttribute('cx', fmt(p[g.k][0]));
-      g.c.setAttribute('cy', fmt(p[g.k][1]));
-    }
+    drawBody(body, p, st, target);
+    const jp = target ? jointPoints(p, target.j) : [];
+    while (rings.length < jp.length) rings.push(el('circle', { r: 5.2, class: 'joint' }, gJ));
+    jp.forEach((q, i) => { rings[i].setAttribute('cx', fmt(q[0])); rings[i].setAttribute('cy', fmt(q[1])); });
   };
 
   const staticFrame = opts.frame ?? (prep.frames.length > 1 ? (anim.thumb ?? 1) : 0);
