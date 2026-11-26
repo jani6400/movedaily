@@ -7,7 +7,7 @@ import { store, dateKey } from './storage.js';
 import { generate, dailyWorkout, swapItem, singleWorkout, DURATIONS, FOCI } from './generator.js';
 import { startPlayer, estimateText } from './player.js';
 import { unlockAudio, speak, voiceAvailable, germanVoices, genderOf, currentVoice, preview as previewSounds } from './signals.js';
-import { h, icon, toast, confirmDialog, sheet, CAT_ICON } from './ui.js';
+import { h, icon, toast, confirmDialog, sheet, CAT_ICON, countUp } from './ui.js';
 
 setFigureGender(store.settings.figure);
 
@@ -106,11 +106,17 @@ function render() {
   const fn = { '': homeView, library: libraryView, history: historyView, settings: settingsView, preview: previewView }[route] || homeView;
   fn();
   const activeRoute = route === 'preview' || route === 'workout' ? '' : route;
-  nav.replaceChildren(...TABS.map((t) => h('a', {
-    href: '#/' + t.route,
-    class: 'tab' + (activeRoute === t.route ? ' active' : ''),
-    'aria-current': activeRoute === t.route ? 'page' : null,
-  }, [icon(t.icon), h('span', {}, t.label)])));
+  // Tab-Leiste einmal aufbauen, danach nur Zustand ändern → Markierung gleitet
+  if (!nav.childElementCount) {
+    nav.append(h('span', { class: 'tab-pill', 'aria-hidden': 'true' }), ...TABS.map((t) => h('a', { href: '#/' + t.route, class: 'tab', 'data-route': t.route }, [icon(t.icon), h('span', {}, t.label)])));
+  }
+  const idx = Math.max(0, TABS.findIndex((t) => t.route === activeRoute));
+  nav.style.setProperty('--i', idx);
+  nav.querySelectorAll('.tab').forEach((a) => {
+    const on = a.dataset.route === activeRoute;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
 }
 window.addEventListener('hashchange', render);
 
@@ -380,14 +386,15 @@ function historyView() {
   drawCal();
 
   const recent = store.state.history.slice(-15).reverse();
+  const num = (n) => countUp(h('span', { class: 'num' }, '0'), n);
   const stat = (value, label, hot) => h('div', { class: 'stat' + (hot ? ' hot' : '') }, [h('b', {}, value), h('span', {}, label)]);
   view.append(
     largeTitle('Verlauf'),
     h('div', { class: 'stats' }, [
-      stat([icon('flame'), String(store.streak())], 'Aktuelle Serie', true),
-      stat(String(store.bestStreak()), 'Beste Serie'),
-      stat(String(t.workouts), 'Workouts'),
-      stat(String(t.minutes), 'Minuten'),
+      stat([icon('flame'), num(store.streak())], 'Aktuelle Serie', true),
+      stat(num(store.bestStreak()), 'Beste Serie'),
+      stat(num(t.workouts), 'Workouts'),
+      stat(num(t.minutes), 'Minuten'),
     ]),
     h('section', { class: 'card' }, cal),
     recent.length
@@ -484,7 +491,7 @@ function settingsView() {
         if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
       }, 'destructive'),
     ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
-    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 2.0'),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 2.1'),
   );
 }
 

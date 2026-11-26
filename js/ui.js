@@ -62,6 +62,21 @@ export function icon(name) {
   return span;
 }
 
+// Zahl weich von 0 hochzählen (respektiert „Bewegung reduzieren“)
+export function countUp(el, to, dur = 900) {
+  const target = Number(to) || 0;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || target === 0) { el.textContent = String(target); return el; }
+  const t0 = performance.now();
+  const stepFn = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    el.textContent = String(Math.round(target * e));
+    if (k < 1) requestAnimationFrame(stepFn);
+  };
+  requestAnimationFrame(stepFn);
+  return el;
+}
+
 let toastTimer = 0;
 export function toast(msg) {
   let t = document.querySelector('.toast');

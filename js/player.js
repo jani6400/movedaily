@@ -6,7 +6,7 @@ import { createFigure } from './figure3d.js';
 import { store } from './storage.js';
 import { workoutSeconds } from './generator.js';
 import * as sig from './signals.js';
-import { h, icon, confirmDialog, toast, CAT_ICON } from './ui.js';
+import { h, icon, confirmDialog, toast, CAT_ICON, countUp } from './ui.js';
 
 const RING = 2 * Math.PI * 54;
 const SWITCH_SECS = 5;
@@ -60,6 +60,9 @@ export function startPlayer(workout, { onExit }) {
   let pausedAt = null;
   let lastSec = null;
   let halfSaid = false;
+  // weich nachgeführte Anzeigewerte (Ring, Fortschritt)
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ringShown = 1, segShown = 0, lastFrame = performance.now(), shownNum = null;
   let tenSaid = false;
   let breathPhase = -1;
   let fig = null;
@@ -132,6 +135,7 @@ export function startPlayer(workout, { onExit }) {
       fig?.stop();
       figBox.replaceChildren();
       fig = createFigure(animFor(e, key.endsWith(':2') ? 2 : 1), { aspect: 1.45, interactive: true });
+      fig.svg.classList.add('fade-in');
       figBox.append(fig.svg);
       if (pausedAt !== null) fig.stop();
     }
@@ -148,6 +152,7 @@ export function startPlayer(workout, { onExit }) {
     tip.replaceChildren(icon('bulb'), h('span', {}, e.tip));
     howto.open = s.kind === 'prep';
     counter.textContent = `${s.i + 1}/${workout.items.length}`;
+    if (s.kind === 'prep') segShown = 0;
     [...segs.children].forEach((el, k) => {
       el.className = k < s.i || doneItems.has(k) ? 'done' : k === s.i ? 'cur' : '';
     });
@@ -294,8 +299,8 @@ export function startPlayer(workout, { onExit }) {
       h('p', { class: 'secondary' }, 'Stark, dass du heute drangeblieben bist.'),
       h('div', { class: 'stats' }, [
         h('div', { class: 'stat' }, [h('b', {}, `${mins}:${String(secs).padStart(2, '0')}`), h('span', {}, 'Dauer')]),
-        h('div', { class: 'stat' }, [h('b', {}, String(count)), h('span', {}, 'Übungen')]),
-        h('div', { class: 'stat hot' }, [h('b', {}, [icon('flame'), String(streak)]), h('span', {}, streak === 1 ? 'Tag Serie' : 'Tage Serie')]),
+        h('div', { class: 'stat' }, [h('b', {}, countUp(h('span', {}, '0'), count)), h('span', {}, 'Übungen')]),
+        h('div', { class: 'stat hot' }, [h('b', {}, [icon('flame'), countUp(h('span', {}, '0'), streak, 1200)]), h('span', {}, streak === 1 ? 'Tag Serie' : 'Tage Serie')]),
       ]),
       h('button', { class: 'btn primary big', onclick: () => exit({ seconds, count }) }, 'Zurück zur Übersicht'),
     ]));
@@ -308,11 +313,11 @@ export function startPlayer(workout, { onExit }) {
     const t = elapsed();
     const e = BY_ID[workout.items[s.i].id];
 
+    smooth(s, t);
     if (s.dur) {
       const left = Math.max(0, s.dur - t);
       const sec = Math.ceil(left);
-      ringFg.style.strokeDashoffset = (RING * (1 - left / s.dur)).toFixed(1);
-      ringNum.textContent = sec;
+      setNum(sec);
       ringSub.textContent = s.kind === 'work' ? 'Sekunden' : s.kind === 'switch' ? 'Seitenwechsel' : 'Vorbereitung';
       if (pausedAt === null && sec !== lastSec) {
         if (lastSec !== null && sec <= 3 && sec > 0) sig.tick();
@@ -341,11 +346,46 @@ export function startPlayer(workout, { onExit }) {
       }
     } else {
       // Wiederholungen: Zeit läuft hoch
-      ringFg.style.strokeDashoffset = '0';
-      ringNum.textContent = `${s.reps}×`;
+      setNum(`${s.reps}×`);
       const m = Math.floor(t / 60), sc = Math.floor(t % 60);
       ringSub.textContent = `${m}:${String(sc).padStart(2, '0')}`;
     }
+  }
+
+  // Zahl im Ring: bei Änderung kurz „weiterrollen“
+  function setNum(v) {
+    if (v === shownNum) return;
+    shownNum = v;
+    ringNum.textContent = v;
+    if (calm) return;
+    ringNum.classList.remove('roll');
+    void ringNum.offsetWidth;
+    ringNum.classList.add('roll');
+  }
+
+  // Ring und Fortschrittsbalken gleiten weich zum Zielwert (exponentielle Glättung)
+  function smooth(s, t) {
+    const now = performance.now();
+    const dt = Math.min(120, now - lastFrame);
+    lastFrame = now;
+    const ringTarget = s.dur ? Math.max(0, 1 - t / s.dur) : 1;
+    const itemSteps = steps.filter((x) => x.i === s.i && x.kind !== 'prep');
+    let segTarget = 0;
+    if (s.kind !== 'prep') {
+      const k = itemSteps.indexOf(s);
+      const e = BY_ID[workout.items[s.i].id];
+      const frac = s.dur ? Math.min(1, t / s.dur) : Math.min(0.9, t / (s.reps * e.rep));
+      segTarget = (k + frac) / itemSteps.length;
+    }
+    const ease = (shown, target, slow) => {
+      if (calm) return target;
+      const tau = Math.abs(target - shown) > 0.06 ? slow : 90;
+      return shown + (target - shown) * (1 - Math.exp(-dt / tau));
+    };
+    ringShown = ease(ringShown, ringTarget, 380);
+    segShown = ease(segShown, segTarget, 300);
+    ringFg.style.strokeDashoffset = (RING * (1 - ringShown)).toFixed(2);
+    segs.children[s.i]?.style.setProperty('--p', segShown.toFixed(4));
   }
 
   function loop() {
