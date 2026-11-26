@@ -15,7 +15,7 @@ const BOX = ['Einatmen', 'Halten', 'Ausatmen', 'Halten'];
 const mirroredAnims = new Map();
 function animFor(e, side) {
   if (side !== 2) return e.anim;
-  if (!mirroredAnims.has(e.id)) mirroredAnims.set(e.id, { ...e.anim, frames: e.anim.frames.map(mirror), wall: e.anim.wall === 'left' ? 'right' : e.anim.wall === 'right' ? 'left' : undefined, mirrored: !e.anim.mirrored });
+  if (!mirroredAnims.has(e.id)) mirroredAnims.set(e.id, { ...e.anim, frames: e.anim.frames.map(mirror), wall: e.anim.wall === 'left' ? 'right' : e.anim.wall === 'right' ? 'left' : undefined, mirrored: !e.anim.mirrored, base: e.anim });
   return mirroredAnims.get(e.id);
 }
 

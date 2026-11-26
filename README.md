@@ -9,7 +9,7 @@ Läuft als installierbare Web-App (PWA) auf dem Handy, offline, ohne Anmeldung. 
 2. **Fokuswahl** – Mix, Mobility, Kräftigung, Dehnen, Entspannung
 3. **Workout-Player** – Kreis-Timer, Vorbereitungszeit mit Vorschau, Pause / Weiter / Zurück
 4. **Zeit- oder Wiederholungs-Übungen** – inkl. automatischem Seitenwechsel bei einseitigen Übungen
-5. **3D-Figuren** – schattiertes Anatomiemodell (männlich oder weiblich), 360° drehbar per Wischen, beanspruchte Muskeln (rot/orange) und Gelenke hervorgehoben; eigener WebGL-Renderer, 2D-Line-Art als Rückfall
+5. **3D-Figuren** – menschliches Körpermodell aus ~90 weich verschmolzenen Muskelbäuchen (männlich oder weiblich), einmalig im Hintergrund in ein Netz umgewandelt und per Skelett animiert; 360° drehbar, beanspruchte Muskeln (rot/orange) und Gelenke hervorgehoben
 6. **Favoriten ❤️ & Ausblenden 🚫** – Favoriten kommen öfter dran, ausgeblendete nie wieder
 7. **Übungsbibliothek** – 66 Übungen (Schwerpunkt Dehnen), filterbar nach Kategorie, Körperbereich, Favoriten
 8. **Tägliche Routine** – Workout des Tages (Thema je Wochentag), Serie 🔥 und Kalender
@@ -67,6 +67,9 @@ Dann `http://localhost:5173` öffnen. (Direktes Öffnen der `index.html` per Dop
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (offline, installierbar) |
 | `tools/gallery.html` | Entwicklungs-Galerie aller Figuren (`/tools/gallery.html`) |
 | `tools/make_icons.py` | Erzeugt die App-Icons neu |
+| `js/body3d.js`, `js/meshgen.js`, `js/skin3d.js` | Körpermodell, Netz-Erzeugung (Web Worker), Skinning-Renderer |
+| `tools/snap.js` | Entwicklungs-Helfer: Figur als Bild exportieren |
+| `tools/shots.js` | Entwicklungs-Helfer: Referenzpose aus mehreren Blickwinkeln exportieren |
 
 ### Neue Übung hinzufügen
 

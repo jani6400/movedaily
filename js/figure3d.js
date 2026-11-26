@@ -5,6 +5,7 @@
 
 import { normalizePose, lerpPose, place, prepare, ease, LEN, createFigure as createFigure2D, setFigureGender as setGender2D } from './figure.js';
 import { h } from './ui.js';
+import { ensureMesh, renderSkinned, onMeshReady, makeRenderer, disposeRenderer } from './skin3d.js';
 
 // ==================== Mathe ====================
 const V = {
@@ -154,8 +155,13 @@ const C = {
 let GENDER = 'm';
 export function setFigureGender(g) { GENDER = g === 'f' ? 'f' : 'm'; setGender2D(GENDER); }
 const B = () => (GENDER === 'f'
-  ? { hw: 7.5, sw: 8.6, pelvis: [8, 7.2, 12.4], waist: [11, 6.2, 8.4], rib: [12.5, 7.6, 10.2], delt: 4.3, ua: 3.3, fa: 2.7, th: 5.6, sh: 3.2, neck: 2.8, head: 8.2, arm: 0.86 }
-  : { hw: 7, sw: 10, pelvis: [8, 7, 11], waist: [11, 6.6, 9.4], rib: [13, 8.6, 11.6], delt: 5.2, ua: 3.8, fa: 3.1, th: 5.8, sh: 3.4, neck: 3.3, head: 8.6, arm: 1 });
+  ? { hw: 9.6, sw: 14.8, pelvis: [8, 7.2, 12.4], waist: [11, 6.2, 8.4], rib: [12.5, 7.6, 10.2], delt: 4.3, ua: 3.3, fa: 2.7, th: 5.6, sh: 3.2, neck: 2.8, head: 8.2, arm: 0.86 }
+  : { hw: 9.0, sw: 17.6, pelvis: [8, 7, 11], waist: [11, 6.6, 9.4], rib: [13, 8.6, 11.6], delt: 5.2, ua: 3.8, fa: 3.1, th: 5.8, sh: 3.4, neck: 3.3, head: 8.6, arm: 1 });
+
+// Ruhepose (A-Pose) für das einmalig erzeugte Körpernetz
+const REST_POSE = { torso: 180, neck: 180, uaN: [0, 0.8], faN: [0, 0.8], uaF: [0, 0.8], faF: [0, 0.8], thN: [0, 0.985], shN: [0, 0.985], ftN: 90, thF: [0, 0.985], shF: [0, 0.985], ftF: 90 };
+const REST_ANIM = { frames: [REST_POSE] };
+const restModel = () => build3D(normalizePose(REST_POSE), REST_ANIM);
 
 // ==================== Pose → 3D ====================
 function viewMode(anim) {
@@ -520,10 +526,10 @@ function boxFor(anim) {
     }
   }
   const rawMinY = mn[1];
-  const pad = 10;
+  const pad = 15;
   mn = mn.map((v) => v - pad); mx = mx.map((v) => v + pad);
   const c = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
-  const r = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2 * 0.7;
+  const r = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2 * 0.8;
   const floor = viewMode(anim) === 'top' ? rawMinY - 5.5 : 0;
   const box = { c, r, floor, mx: (mx[0] - mn[0]) / 2 + 6, mz: Math.max(18, (mx[2] - mn[2]) / 2 + 4) };
   boxCache.set(key, { g: GENDER, box });
@@ -535,7 +541,7 @@ const active = new Set();
 let raf = 0;
 function loop(now) {
   for (const f of active) {
-    if (!f.wrap.isConnected) { if (f.started) active.delete(f); continue; }
+    if (!f.wrap.isConnected) { if (f.started) { active.delete(f); f.dispose(); } continue; }
     f.tick(now);
   }
   raf = active.size ? requestAnimationFrame(loop) : 0;
@@ -555,19 +561,27 @@ export function createFigure(anim, opts = {}) {
   const view = {
     yaw: opts.yaw ?? (mode === 'side' ? -28 : mode === 'top' ? -20 : mode === 'rear' ? 200 : 18),
     pitch: opts.pitch ?? (mode === 'top' ? 52 : 10),
-    box: boxFor(anim),
+    box: null, // wird erst beim ersten Zeichnen berechnet (spart Zeit in Listen)
   };
   const home = { yaw: view.yaw, pitch: view.pitch };
   let auto = false;
   let dirty = true;
   const staticFrame = opts.frame ?? (prep.frames.length > 1 ? (anim.thumb ?? 1) : 0);
+  // Seite 2: die ungespiegelte Bewegung zeichnen und das Bild spiegeln (für das Netz)
+  const baseAnim = anim.base || anim;
+  const basePrep = anim.base ? prepare(anim.base) : prep;
   let pose = prep.frames[Math.min(staticFrame, prep.frames.length - 1)];
+  let basePose = basePrep.frames[Math.min(staticFrame, basePrep.frames.length - 1)];
   const t0 = performance.now();
 
+  let inst = null, glCanvas = null; // eigener Renderer für bewegte Figuren
   const fig = {
-    svg: wrap, wrap, started: false, playing: false,
+    svg: wrap, wrap, started: false, playing: false, visible: true,
+    dispose() { if (inst) { disposeRenderer(inst); inst = null; } },
     tick(now) {
       fig.started = true;
+      // verdeckte Figuren (z. B. Startseite hinter dem Player oder außer Sicht) pausieren
+      if ((fig.playing || auto || interactive) && (!fig.visible || (document.body.classList.contains('playing') && !wrap.closest('.player')))) return;
       if (fig.playing && prep.frames.length > 1) {
         const steps = prep.seq.map((f) => prep.holds[f] + prep.T);
         const period = steps.reduce((a, c) => a + c, 0);
@@ -576,47 +590,147 @@ export function createFigure(anim, opts = {}) {
         const hd = prep.holds[prep.seq[k]];
         const A = prep.frames[prep.seq[k]];
         pose = t < hd ? A : lerpPose(A, prep.frames[prep.seq[(k + 1) % prep.seq.length]], ease((t - hd) / prep.T));
+        const BA = basePrep.frames[prep.seq[k]];
+        basePose = t < hd ? BA : lerpPose(BA, basePrep.frames[prep.seq[(k + 1) % prep.seq.length]], ease((t - hd) / prep.T));
         dirty = true;
       }
       if (auto) { view.yaw += 0.35; dirty = true; }
       if (!dirty) { if (!fig.playing && !auto) active.delete(fig); return; }
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.round(canvas.clientWidth * dpr), hgt = Math.round(canvas.clientHeight * dpr);
-      if (!w || !hgt) return;
+      // Auflösung: bewegte Figuren etwas niedriger (flüssig), Standbilder schärfer
+      const live = fig.playing || auto || interactive;
+      let dpr = Math.min(window.devicePixelRatio || 1, live ? 1.3 : 1.75);
+      const cw = canvas.clientWidth, ch = canvas.clientHeight;
+      if (!cw || !ch) { if (!live && fig.wrap.isConnected) setTimeout(() => { queue.push(fig); runQueue(); }, 250); return; }
+      if (live && cw * ch * dpr * dpr > 300000) dpr = Math.sqrt(300000 / (cw * ch));
+      const w = Math.round(cw * dpr), hgt = Math.round(ch * dpr);
       if (canvas.width !== w || canvas.height !== hgt) { canvas.width = w; canvas.height = hgt; }
-      const model = build3D(pose, anim);
-      renderScene(g, view, model, opts.highlight === false ? null : anim.target, w, hgt);
       const ctx = canvas.getContext('2d');
+      const target = opts.highlight === false ? null : anim.target;
+      // Standbilder: aus dem Zwischenspeicher, wenn schon einmal gezeichnet
+      const key = `${GENDER}|${w}x${hgt}|${staticFrame}|${target ? 1 : 0}|${view.yaw}|${view.pitch}`;
+      if (!live) {
+        const hit = thumbCache.get(anim)?.get(key);
+        if (hit) { ctx.clearRect(0, 0, w, hgt); ctx.drawImage(hit, 0, 0); dirty = false; return; }
+      }
+      // Bevorzugt: animiertes Körpernetz. Solange es entsteht: einfache Figur als Platzhalter.
+      let src = null, upgraded = false;
+      if (ensureMesh(GENDER, restModel())) {
+        if (!view.box) view.box = boxFor(baseAnim);
+        const model = build3D(basePose, baseAnim);
+        model.joints = target ? jointMarkers(model, target) : [];
+        if (live) {
+          // direkt in eine eigene WebGL-Zeichenfläche zeichnen (kein Kopieren pro Bild)
+          if (!inst) {
+            glCanvas = h('canvas', { class: 'fig3d-canvas', 'aria-hidden': 'true' });
+            wrap.insertBefore(glCanvas, canvas.nextSibling);
+            inst = makeRenderer(glCanvas);
+          }
+          if (inst && renderSkinned(view, model, target, GENDER, w, hgt, !!anim.base, inst)) {
+            canvas.style.visibility = 'hidden';
+            dirty = false;
+            return;
+          }
+        }
+        src = renderSkinned(view, model, target, GENDER, w, hgt, !!anim.base);
+        upgraded = !!src;
+      }
+      if (!src) {
+        if (!fig.box2) fig.box2 = boxFor(anim);
+        const model = build3D(pose, anim);
+        renderScene(g, { ...view, box: fig.box2 }, model, target, w, hgt);
+        src = g.canvas;
+        waiting.add(fig);
+      }
       ctx.clearRect(0, 0, w, hgt);
-      ctx.drawImage(g.canvas, 0, g.canvas.height - hgt, w, hgt, 0, 0, w, hgt);
+      ctx.drawImage(src, 0, src.height - hgt, w, hgt, 0, 0, w, hgt);
+      if (!live && upgraded) {
+        const copy = document.createElement('canvas');
+        copy.width = w; copy.height = hgt;
+        copy.getContext('2d').drawImage(canvas, 0, 0);
+        if (!thumbCache.has(anim)) thumbCache.set(anim, new Map());
+        thumbCache.get(anim).set(key, copy);
+      }
       dirty = false;
     },
     play() { fig.playing = animate; active.add(fig); kick(); return fig; },
+    refresh() { dirty = true; if (fig.playing || interactive) { active.add(fig); kick(); } else { queue.push(fig); runQueue(); } },
     stop() { fig.playing = false; dirty = true; },
     update() {},
   };
 
   if (interactive) {
     let drag = null;
-    canvas.addEventListener('pointerdown', (e) => { active.add(fig); kick(); drag = { x: e.clientX, y: e.clientY, yaw: view.yaw, pitch: view.pitch }; canvas.setPointerCapture(e.pointerId); wrap.classList.add('touched'); auto = false; autoBtn.classList.remove('on'); });
-    canvas.addEventListener('pointermove', (e) => {
+    wrap.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; active.add(fig); kick(); drag = { x: e.clientX, y: e.clientY, yaw: view.yaw, pitch: view.pitch }; wrap.setPointerCapture(e.pointerId); wrap.classList.add('touched'); auto = false; autoBtn.classList.remove('on'); });
+    wrap.addEventListener('pointermove', (e) => {
       if (!drag) return;
       view.yaw = drag.yaw - (e.clientX - drag.x) * 0.6;
       view.pitch = Math.max(-12, Math.min(80, drag.pitch + (e.clientY - drag.y) * 0.4));
       dirty = true; active.add(fig); kick();
     });
     const end = () => { drag = null; };
-    canvas.addEventListener('pointerup', end);
-    canvas.addEventListener('pointercancel', end);
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
     const autoBtn = h('button', { class: 'fig3d-btn', 'aria-label': 'Automatisch drehen', onclick: () => { auto = !auto; autoBtn.classList.toggle('on', auto); wrap.classList.add('touched'); active.add(fig); kick(); } }, '360°');
     const resetBtn = h('button', { class: 'fig3d-btn', 'aria-label': 'Ansicht zurücksetzen', onclick: () => { auto = false; autoBtn.classList.remove('on'); view.yaw = home.yaw; view.pitch = home.pitch; dirty = true; active.add(fig); kick(); } }, '⟲');
     wrap.append(h('div', { class: 'fig3d-tools' }, [resetBtn, autoBtn]), h('span', { class: 'fig3d-hint' }, 'Zum Drehen ziehen'));
   }
 
-  active.add(fig);
   if (animate) fig.playing = true;
-  kick();
+  if (!animate && !interactive) lazyRender(fig); // Standbild: erst zeichnen, wenn sichtbar
+  else {
+    if (liveIO) { wrap.__fig = fig; liveIO.observe(wrap); }
+    active.add(fig); kick();
+  }
   return fig;
+}
+
+// ==================== Standbilder: verzögert und gestaffelt zeichnen ====================
+const thumbCache = new WeakMap(); // anim → Map(Schlüssel → Bild)
+// Figuren, die noch mit dem Platzhalter gezeichnet wurden: neu zeichnen, sobald das Netz fertig ist
+const waiting = new Set();
+onMeshReady(() => {
+  for (const f of waiting) {
+    if (!f.wrap.isConnected) continue;
+    f.refresh();
+  }
+  waiting.clear();
+});
+const queue = [];
+let qRaf = 0;
+function runQueue() {
+  if (qRaf) return;
+  qRaf = requestAnimationFrame(function step() {
+    const t = performance.now();
+    while (queue.length && performance.now() - t < 12) {
+      const f = queue.shift();
+      if (f.wrap.isConnected) f.tick(performance.now());
+    }
+    qRaf = queue.length ? requestAnimationFrame(step) : 0;
+  });
+}
+const io = 'IntersectionObserver' in window
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      io.unobserve(e.target);
+      if (e.target.__fig) { queue.push(e.target.__fig); runQueue(); }
+    }
+  }, { rootMargin: '250px 0px' })
+  : null;
+const liveIO = 'IntersectionObserver' in window
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const f = e.target.__fig;
+      if (!f) continue;
+      f.visible = e.isIntersecting;
+      if (f.visible) { active.add(f); kick(); }
+    }
+  })
+  : null;
+
+function lazyRender(fig) {
+  if (io) { fig.wrap.__fig = fig; io.observe(fig.wrap); }
+  else { queue.push(fig); runQueue(); }
 }
 
 // Nach Wechsel der Figur alle Bildausschnitte neu berechnen

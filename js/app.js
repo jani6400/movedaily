@@ -491,7 +491,7 @@ function settingsView() {
         if (await confirmDialog('Alle Daten löschen?', 'Verlauf, Serie, Favoriten und Einstellungen werden endgültig gelöscht.', 'Löschen', 'Abbrechen', { destructive: true })) { store.resetAll(); render(); toast('Alle Daten gelöscht'); }
       }, 'destructive'),
     ], `${store.state.favorites.length} Favoriten, ${store.state.hidden.length} ausgeblendet. Alles bleibt nur auf diesem Gerät gespeichert.`),
-    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 2.1'),
+    h('p', { class: 'foot' }, 'Die Übungen ersetzen keine ärztliche oder physiotherapeutische Beratung. Bei Schmerzen abbrechen. · Version 2.2'),
   );
 }
 

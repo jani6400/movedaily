@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline nutzbar.
 // Bei jeder Änderung an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'movedaily-v7';
+const VERSION = 'movedaily-v10';
 
 const FILES = [
   './',
@@ -11,6 +11,9 @@ const FILES = [
   './js/exercises.js',
   './js/figure.js',
   './js/figure3d.js',
+  './js/body3d.js',
+  './js/skin3d.js',
+  './js/meshgen.js',
   './js/generator.js',
   './js/player.js',
   './js/signals.js',
